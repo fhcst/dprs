@@ -116,6 +116,9 @@ build/
 .spectra/
 openspec/.vector-search.db*
 
+# --- Rust build artifacts (keep pkg/ — pre-built WASM bundle for frontend) ---
+crates/*/target/
+
 # --- AI Agent local settings ---
 .claude/settings.local.json
 .superpowers

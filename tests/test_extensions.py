@@ -118,3 +118,23 @@ def test_get_badge_triggers_factory_exists():
 def test_get_submission_validators_factory_exists():
     from extensions.deps import get_submission_validators
     assert callable(get_submission_validators)
+
+
+def test_get_reward_providers_returns_list_of_impls():
+    """get_reward_providers() must return a list of implementation objects, not dict keys."""
+    from extensions.registry import TestRegistry
+    from extensions.protocols import RewardProvider
+    from extensions.deps import get_reward_providers
+
+    class FakeRewardProvider:
+        async def award(self, event):
+            pass
+
+    with TestRegistry() as reg:
+        reg.register(RewardProvider, "test_rp", FakeRewardProvider())
+        result = get_reward_providers()
+        assert isinstance(result, list), f"Expected list, got {type(result)}"
+        assert len(result) == 1
+        assert isinstance(result[0], FakeRewardProvider), (
+            f"Expected FakeRewardProvider instance, got {type(result[0])}"
+        )

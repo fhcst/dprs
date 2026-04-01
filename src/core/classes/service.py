@@ -2,6 +2,8 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from pymongo.errors import DuplicateKeyError
+
 from core.classes.models import Class, ClassMembership, JoinRequest
 from core.auth.permissions import MANAGE_ALL_CLASSES, MANAGE_OWN_CLASS
 from core.users.models import IdentityTag, User
@@ -53,7 +55,10 @@ async def create_class(
         user_id=str(owner.id),
         role="teacher",
     )
-    await membership.insert()
+    try:
+        await membership.insert()
+    except DuplicateKeyError:
+        pass  # Already a member — safe to ignore
     return cls
 
 
@@ -79,7 +84,15 @@ async def join_class_by_code(user: User, invite_code: str) -> ClassMembership:
         user_id=str(user.id),
         role="student",
     )
-    await membership.insert()
+    try:
+        await membership.insert()
+    except DuplicateKeyError:
+        # Concurrent join — re-fetch the existing membership
+        existing = await ClassMembership.find_one(
+            ClassMembership.class_id == str(cls.id),
+            ClassMembership.user_id == str(user.id),
+        )
+        return existing
     return membership
 
 
@@ -101,7 +114,14 @@ async def join_class_by_id(user: User, class_id: str) -> ClassMembership:
         user_id=str(user.id),
         role="student",
     )
-    await membership.insert()
+    try:
+        await membership.insert()
+    except DuplicateKeyError:
+        existing = await ClassMembership.find_one(
+            ClassMembership.class_id == class_id,
+            ClassMembership.user_id == str(user.id),
+        )
+        return existing
     return membership
 
 
@@ -221,8 +241,11 @@ async def batch_invite_students(class_id: str, user_ids: list[str]) -> int:
             user_id=uid,
             role="student",
         )
-        await membership.insert()
-        added += 1
+        try:
+            await membership.insert()
+            added += 1
+        except DuplicateKeyError:
+            pass  # Concurrent insert — skip
     return added
 
 
@@ -300,37 +323,61 @@ async def review_join_request(
     request_id: str,
     action: str,
     reviewer: User,
+    class_id: str | None = None,
 ) -> JoinRequest:
     """
     Approve or reject a pending JoinRequest.
 
-    On approve: creates ClassMembership and updates status.
+    On approve: creates ClassMembership (idempotent) and updates status.
     On reject: updates status and reviewed_at.
+
+    Args:
+        class_id: If provided, validates that the JoinRequest belongs to this class.
     """
     jr = await JoinRequest.get(request_id)
     if jr is None:
         raise ValueError("Join request not found")
 
+    if class_id is not None and jr.class_id != class_id:
+        raise ValueError("Join request does not belong to the specified class")
+
     if jr.status != "pending":
         raise ValueError("Only pending requests can be reviewed")
+
+    if action not in ("approve", "approved", "reject", "rejected"):
+        raise ValueError(f"Invalid action: {action!r}. Must be 'approve' or 'reject'")
 
     now = datetime.now(timezone.utc)
     jr.reviewed_at = now
     jr.reviewed_by = str(reviewer.id)
 
     if action in ("approve", "approved"):
+        # Create membership FIRST — if this fails, status stays pending (retryable).
+        # If status update fails after this, membership exists but request is
+        # still pending; a retry will hit ensure_membership (idempotent) then save.
+        await ensure_membership(jr.class_id, jr.user_id)
         jr.status = "approved"
         await jr.save()
-        membership = ClassMembership(
-            class_id=jr.class_id,
-            user_id=jr.user_id,
-            role="student",
-        )
-        await membership.insert()
-    elif action in ("reject", "rejected"):
+    else:
         jr.status = "rejected"
         await jr.save()
-    else:
-        raise ValueError(f"Invalid action: {action!r}. Must be 'approve' or 'reject'")
 
     return jr
+
+
+async def ensure_membership(class_id: str, user_id: str) -> None:
+    """Atomically ensure a ClassMembership exists (race-safe, truly idempotent).
+
+    Uses MongoDB's update_one with upsert=True so concurrent calls
+    cannot produce duplicate documents.
+    """
+    await ClassMembership.get_pymongo_collection().update_one(
+        {"class_id": class_id, "user_id": user_id},
+        {"$setOnInsert": {
+            "class_id": class_id,
+            "user_id": user_id,
+            "role": "student",
+            "joined_at": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from beanie import Document
+from pymongo import IndexModel, ASCENDING
 from pydantic import BaseModel, Field
 
 ClassVisibility = Literal["public", "private"]
@@ -40,6 +41,12 @@ class ClassMembership(Document):
 
     class Settings:
         name = "classmemberships"
+        indexes = [
+            IndexModel(
+                [("class_id", ASCENDING), ("user_id", ASCENDING)],
+                unique=True,
+            ),
+        ]
 
 
 class JoinRequest(Document):

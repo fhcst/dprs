@@ -23,7 +23,13 @@ dependencies = [
     "redis>=5.0.0",
     "fakeredis>=2.0.0",
     "slowapi>=0.1.9",
+    "maturin>=1.5",
 ]
+
+# dsl-engine (Rust/PyO3) is NOT listed here — it requires Rust toolchain to build.
+# Install via: cd crates/dsl-engine && maturin develop --features python
+# In Docker: the Dockerfile multi-stage build handles it automatically.
+# The app runs without it; trigger-rule validation returns a clear error.
 
 [tool.uv.sources]
 fastapi-webpage = { git = "https://github.com/cxphoenix/fastapi-webpage.git" }

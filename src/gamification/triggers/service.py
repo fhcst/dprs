@@ -81,8 +81,14 @@ async def get_rule_with_badge_count(rule: TriggerRule) -> dict:
 
 def _validate_expression(expression: str) -> None:
     """Validate DSL expression using the Rust engine via PyO3.
-    Raises ValueError with details if validation fails."""
-    import dsl_engine
+    Raises ValueError with details if validation fails or engine is unavailable."""
+    try:
+        import dsl_engine
+    except ImportError:
+        raise ValueError(
+            "DSL engine (dsl_engine) is not installed. "
+            "Please run 'maturin develop --features python' in crates/dsl-engine/"
+        )
 
     result_json = dsl_engine.validate(expression)
     diagnostics = json.loads(result_json)

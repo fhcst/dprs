@@ -61,6 +61,9 @@ class ScheduleRuleRequest(BaseModel):
     max_submissions_per_student: int = 0
     date: Optional[_DateField] = None
     sync_discord: bool = False
+    dc_title_override: Optional[str] = None
+    dc_desc_override: Optional[str] = None
+    dc_footer_override: Optional[str] = None
 
 
 async def _require_class_manage(class_id: str, user: User) -> None:
@@ -140,6 +143,9 @@ async def create_schedule_rule(
                         date=date_str or None,
                         class_template=class_tmpl,
                         class_name=cls.name,
+                        title_override=body.dc_title_override,
+                        description_override=body.dc_desc_override,
+                        footer_override=body.dc_footer_override,
                     )
                 except Exception:
                     logger.error("Discord send failed for class %s", class_id)

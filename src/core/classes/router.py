@@ -227,7 +227,7 @@ async def review_join_request_endpoint(
     """Approve or reject a pending join request (teacher-only)."""
     await _require_manage(class_id, user)
     try:
-        jr = await review_join_request(request_id=request_id, action=body.action, reviewer=user)
+        jr = await review_join_request(request_id=request_id, action=body.action, reviewer=user, class_id=class_id)
     except ValueError as e:
         detail = str(e)
         if "not found" in detail.lower():
