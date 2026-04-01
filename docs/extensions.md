@@ -326,3 +326,57 @@ def test_custom_auth():
 1. 進入 `with` 區塊時，`TestRegistry` 建立一個全新的 `ExtensionRegistry` 實例，並取代模組層級的 `registry` singleton。
 2. 測試程式碼使用回傳的 `test_reg` 進行註冊與查詢，與正式環境完全隔離。
 3. 離開 `with` 區塊後，原始的 singleton 自動恢復，不影響後續測試或應用程式狀態。
+
+---
+
+## DSL 觸發規則與 Code Trigger 共存
+
+`BadgeDefinition` 支援三種觸發來源：
+
+| 欄位 | 來源 | 說明 |
+|------|------|------|
+| `trigger_key` | ExtensionRegistry 程式碼觸發器 | 對應 `BadgeTrigger` Protocol 的已註冊實作 |
+| `trigger_rule_id` | DSL 規則 | 對應 `TriggerRule` 文件中的 DSL 表達式 |
+| 都不設 | 手動頒發 | 由教師或管理員透過 API 手動授予 |
+
+`trigger_key` 和 `trigger_rule_id` **互斥**——同一個 `BadgeDefinition` 不可同時設定兩者。此約束由 Pydantic `model_validator` 驗證，若同時提供兩個欄位會拋出 `ValueError`。
+
+### 合併評估流程
+
+`evaluate_triggers_for_event()` 在每次 `RewardEvent` 發生時同時評估 Code Trigger 與 DSL Rule：
+
+```
+evaluate_triggers_for_event()
+├── Path 1: Code Triggers (ExtensionRegistry)
+│   for key, trigger in registry.get_all(BadgeTrigger).items():
+│       trigger.evaluate(student_id, event, context)
+│
+└── Path 2: DSL Rules (Rust engine via PyO3)
+    for badge with trigger_rule_id:
+        rule = TriggerRule.get(trigger_rule_id)
+        dsl_engine.evaluate(rule.expression, eval_context)
+```
+
+- **Path 1** 遍歷所有透過 `ExtensionRegistry` 註冊的 `BadgeTrigger` 實作，逐一呼叫 `evaluate()` 方法。
+- **Path 2** 查詢所有設有 `trigger_rule_id` 的 `BadgeDefinition`，取出對應的 `TriggerRule`，並透過 PyO3 呼叫 Rust DSL 引擎 `dsl_engine.evaluate()` 進行評估。
+
+開發者仍可使用 Python Protocol 撰寫自訂觸發器並透過 `registry.register(BadgeTrigger, ...)` 註冊——DSL 系統不取代既有的 Code Trigger 機制，兩者共存互補。
+
+---
+
+### `ensure_membership()` — 原子性成員建立
+
+**路徑：** `src/core/classes/service.py`
+
+`ensure_membership()` 使用 MongoDB 的 atomic `update_one` 搭配 `upsert=True` 與 `$setOnInsert` 運算子，以單一操作確保 `ClassMembership` 文件存在：
+
+- 若文件**不存在**：插入新文件，欄位值由 `$setOnInsert` 決定。
+- 若文件**已存在**：不做任何修改，直接回傳。
+
+**適用場景：**
+
+- Join-request approval（加入申請核准）
+- Batch invite（批次邀請）
+- 任何需要確保 `ClassMembership` 存在的流程
+
+此方法取代了先前的 check-then-insert 模式（先查詢是否存在、再決定是否插入），消除了並行請求下的 race condition。在高併發情境中，多個請求同時對同一學生執行 `ensure_membership()` 時，只有第一個會實際插入文件，其餘請求因 `upsert` 語義而安全地跳過寫入。

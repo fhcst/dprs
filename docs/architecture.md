@@ -51,6 +51,35 @@
 4. Handler 透過 FastAPI Dependency Injection（依賴注入）取得認證使用者與授權檢查。
 5. Service Layer（服務層）執行商業邏輯，透過 Beanie ODM 存取 MongoDB，透過 Redis 管理 Session（工作階段）與應用程式狀態。
 
+### DSL Engine 架構
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Browser                                            │
+│  ┌──────────────┐  ┌──────────────┐                 │
+│  │ CodeMirror 6 │  │  Milkdown    │                 │
+│  │ DSL Editor   │  │  WYSIWYG     │                 │
+│  └──────┬───────┘  └──────────────┘                 │
+│         │ validate/complete/hover                    │
+│  ┌──────▼───────┐                                   │
+│  │ dsl-engine   │                                   │
+│  │ (WASM)       │                                   │
+│  └──────────────┘                                   │
+└─────────────────────────────────────────────────────┘
+                    │ HTTP API
+┌─────────────────────────────────────────────────────┐
+│  FastAPI Server                                     │
+│  ┌──────────────┐  ┌──────────────┐                 │
+│  │ triggers/    │  │ badges/      │                 │
+│  │ router.py    │  │ service.py   │                 │
+│  └──────┬───────┘  └──────┬───────┘                 │
+│         │                 │ evaluate                 │
+│  ┌──────▼─────────────────▼───────┐                 │
+│  │     dsl-engine (PyO3)          │                 │
+│  └────────────────────────────────┘                 │
+└─────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 2. 模組結構
@@ -104,6 +133,10 @@ src/
 │   │   └── router.py          #     徽章管理端點
 │   ├── leaderboard/           #   排行榜
 │   │   └── router.py          #     排行榜查詢端點
+│   ├── triggers/               #   觸發規則管理
+│   │   ├── models.py           #     TriggerRule Document
+│   │   ├── service.py          #     觸發規則 CRUD + CBAC 權限
+│   │   └── router.py           #     觸發規則管理端點
 │   └── prizes/                #   獎品商城
 │       ├── models.py          #     Prize Document
 │       └── router.py          #     獎品管理端點
@@ -143,6 +176,10 @@ src/
     ├── teacher/               #   教師介面頁面
     ├── student/               #   學生介面頁面
     └── community/             #   社群頁面
+
+crates/
+└── dsl-engine/                # Rust DSL 表達式引擎
+    #   pest parser → AST → evaluate/validate/complete/hover/describe/help
 ```
 
 ---
@@ -274,11 +311,14 @@ User
 
 Class
  ├──1:N──→ ClassMembership
+ │           unique compound index: (class_id, user_id)
  ├──1:N──→ TaskTemplate (class_id)
  ├──1:N──→ CheckinConfig (class_id)
  ├──1:N──→ DailyCheckinOverride (class_id)
  ├──1:N──→ ClassPointConfig (class_id)
  ├──1:N──→ BadgeDefinition (class_id)
+ │           trigger_rule_id: Optional[str]，與 trigger_key 互斥（model_validator）
+ ├──1:N──→ TriggerRule (class_id)
  ├──1:N──→ Prize (class_id)
  └──1:N──→ AttendanceCorrection (class_id)
 
@@ -303,8 +343,9 @@ SystemConfig ── 單例文件（Singleton Document）
 | tasks/checkin | `AttendanceCorrection` | `attendancecorrections` | 教師出席補正（遲到 / 缺席） |
 | gamification/points | `PointTransaction` | `pointtransactions` | 點數交易紀錄（正數=獲得、負數=扣除） |
 | gamification/points | `ClassPointConfig` | `classpointconfigs` | 班級點數設定（打卡/繳交各幾分） |
-| gamification/badges | `BadgeDefinition` | `badgedefinitions` | 徽章定義（名稱、圖示、觸發條件） |
+| gamification/badges | `BadgeDefinition` | `badgedefinitions` | 徽章定義（名稱、圖示、觸發條件）；`trigger_rule_id` 與 `trigger_key` 互斥 |
 | gamification/badges | `BadgeAward` | `badgeawards` | 徽章頒發紀錄 |
+| gamification/triggers | `TriggerRule` | `triggerrules` | 觸發規則：class_id, name, expression, is_active, created_by, created_at, updated_at |
 | gamification/prizes | `Prize` | `prizes` | 獎品（線上 / 實體） |
 | community/feed | `FeedPost` | `feedposts` | 班級動態貼文 |
 | community/feed | `Reaction` | `reactions` | 貼文表情回應 |
@@ -381,6 +422,9 @@ registry.register(AuthProvider, "google", GoogleOAuthProvider())
 | **Rate Limiting** | SlowAPI | 基於 IP 的請求速率限制 |
 | **HTTP Client** | HTTPX | 非同步 HTTP Client（外部整合用） |
 | **Encryption** | cryptography | 加密工具套件 |
+| **DSL Engine** | Rust (pest 2.8, wasm-bindgen 0.2, pyo3 0.25) | DSL 表達式引擎，編譯為 WASM（前端）與 PyO3（後端） |
+| **Frontend Editor** | CodeMirror 6 (ESM CDN) | DSL 編輯器，語法高亮 / 自動完成 / hover |
+| **Frontend WYSIWYG** | Milkdown (ESM CDN) | 所見即所得 Markdown 編輯器 |
 | **Runtime** | Python 3.13+ | 最低要求版本 |
 | **Package Manager** | uv | 快速 Python 套件管理工具 |
 | **License** | ECL-2.0 | Educational Community License |

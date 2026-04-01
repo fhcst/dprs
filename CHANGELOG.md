@@ -3,6 +3,43 @@
 本檔案記錄本專案所有重要變更。格式依循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，
 版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 
+## [0.6.0] - 2026-04-01
+
+### Added（新增）
+
+- 新增 Rust DSL 表達式引擎（`crates/dsl-engine/`）— 支援 parse、validate、evaluate、autocomplete、hover、describe、help 七大 API，編譯為 WASM（前端）與 PyO3（後端）雙目標，共 46 個 Rust 單元測試
+- 新增觸發規則管理系統（`src/gamification/triggers/`）— TriggerRule CRUD 五個 REST endpoints、教師管理頁面
+- 新增 CodeMirror 6 DSL 編輯器 — 即時語法驗證、自動補全、hover 提示，整合 WASM module
+- 新增 Milkdown WYSIWYG Markdown 徽章說明編輯器 — G2 分區塊模式（自動條件摘要 + 自由撰寫區）
+- 新增 DSL Help Modal — 從 Rust crate 動態生成變數/運算子/函數/範例說明
+- 新增 `GET /classes/{class_id}/students/stats` API — 班級學生聚合統計資料，支援時間窗口參數
+- 新增前端規則 dry-run 測試 — WASM evaluate 逐一測試每位學生，顯示符合/不符合結果
+- 新增 GitHub Actions CI for DSL engine（Rust 測試 → WASM 編譯 → PyO3 wheel 建置）
+- 新增 `ensure_membership()` atomic upsert API — race-safe 的 ClassMembership 建立
+
+### Changed（變更）
+
+- Dockerfile 改為 multi-stage build — builder stage 編譯 PyO3 wheel，runtime stage 不含 Rust toolchain
+- `ExtensionRegistry.get_all()` 回傳型別改為 `dict[str, Any]`，`deps.py` factory 函數自動轉為 list
+- `review_join_request()` 新增 `class_id` 參數進行歸屬驗證
+- `BadgeDefinition` 新增 `trigger_rule_id` 欄位，與 `trigger_key` 互斥（Pydantic model_validator）
+- 觸發評估流程合併 code trigger + DSL rule 雙路徑
+
+### Fixed（修正）
+
+- **[P0]** 修復 `get_reward_providers()` 回傳 dict 導致打卡/繳交流程 `AttributeError` 崩潰
+- 修復 join-request 跨班授權漏洞 — 教師無法再透過猜測 request_id 核准其他班級申請
+- 修復 ClassMembership 重複建立問題 — 新增 unique compound index + 所有建立路徑 DuplicateKeyError 處理
+- 修復 Discord override 欄位（`dc_title_override` 等）未傳遞至 webhook renderer
+- 修復 `dsl_engine` 未安裝時 trigger-rule CRUD 回傳 500 — 改為明確錯誤訊息
+
+### Security（安全性）
+
+- ClassMembership `(class_id, user_id)` unique compound index 防止重複成員
+- DSL 沙箱：白名單制變數與函數、無賦值/迴圈、class-scoped 資料隔離
+- `ensure_membership()` 使用 MongoDB atomic upsert 防止 race condition
+- join-request approval 改為 membership-first 順序，partial failure 可安全重試
+
 ## [0.5.0] - 2026-03-25
 
 ### Security（安全性）
@@ -119,7 +156,8 @@
 - README、使用說明、貢獻指南
 - 專案重新命名為 DPRS（Daily Practice Recording System）
 
-[0.5.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.3.0...HEAD
+[0.6.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fhsh-tp/daily-training-submit-system/releases/tag/v0.1.0

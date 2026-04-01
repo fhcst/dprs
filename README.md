@@ -20,6 +20,7 @@
 
 - **點數系統** — 簽到與提交事件自動觸發點數獎勵，可依班級設定點數值
 - **徽章** — 教師自訂徽章定義，搭配可擴充的觸發條件
+- **DSL 觸發規則** — 教師可用表達式語言（如 `checkin_streak >= 7 AND submission_count >= 3`）自訂成就觸發條件；CodeMirror 6 編輯器提供即時語法驗證、自動補全與 hover 提示；前端 dry-run 測試讓教師預覽規則效果；Milkdown WYSIWYG Markdown 編輯器用於徽章說明；DSL Help Modal 提供完整語法參考
 - **排行榜** — 以班級為範圍，依累積點數排名；支援跨班級排行
 - **獎品預覽** — 顯示與點數里程碑對應的獎品
 
@@ -44,6 +45,10 @@
 | 套件管理 | [uv](https://github.com/astral-sh/uv) |
 | 測試 | pytest + pytest-asyncio + mongomock-motor |
 | 容器化 | Docker + Docker Compose |
+| **DSL 引擎** | |
+| 表達式解析 | [Rust](https://www.rust-lang.org/)（[pest](https://pest.rs/) PEG parser） |
+| 前端驗證 | [WebAssembly](https://webassembly.org/)（wasm-pack 編譯） |
+| Python 綁定 | [PyO3](https://pyo3.rs/)（[maturin](https://github.com/PyO3/maturin) 建置 FFI） |
 
 ---
 
@@ -82,6 +87,11 @@ uv run fastapi dev src/main.py           # 啟動開發伺服器（含熱重載�
 ```
 
 首次啟動會自動導向 **Setup Wizard**，完成系統名稱與管理員帳號設定。
+
+> **Rust 工具鏈為選裝（OPTIONAL）**
+> - 不安裝 Rust 仍可正常執行所有功能。
+> - 觸發規則管理功能在未安裝 `dsl_engine` 時會顯示明確錯誤訊息。
+> - 若需修改 DSL 引擎原始碼，請安裝 Rust：`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 
 > 完整部署說明請參閱 [docs/getting-started.md](docs/getting-started.md)
 

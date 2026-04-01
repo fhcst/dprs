@@ -13,6 +13,17 @@
 | Docker 部署（推薦） | [Docker](https://docs.docker.com/get-docker/) 含 Docker Compose（Docker Compose 為 Docker Desktop 內建） |
 | 本機開發 | Python 3.13 以上、[uv](https://docs.astral.sh/uv/)（Python 套件管理工具）、MongoDB 8.0、Redis 7 |
 
+### 選用：Rust toolchain
+
+> **僅在修改 `crates/dsl-engine/` 原始碼時需要，不安裝 Rust 不影響專案啟動和使用。**
+> 若未安裝 Rust，觸發規則功能會顯示明確錯誤提示。
+
+安裝指令：
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
 ---
 
 ## 使用 Docker Compose 部署
@@ -113,6 +124,25 @@ uv run fastapi dev src/main.py
 ```
 
 開發伺服器預設監聽 `http://127.0.0.1:8000`，並支援程式碼熱重載（Hot Reload）——修改 `src/` 底下的檔案後，伺服器會自動重新載入。
+
+### 5. DSL 引擎建置（選用）
+
+安裝 PyO3 binding，讓後端可以呼叫 Rust DSL 引擎：
+
+```bash
+# 安裝 PyO3 binding（讓後端可以呼叫 Rust DSL 引擎）
+cd crates/dsl-engine
+maturin develop --features python
+cd ../..
+```
+
+> **不執行此步驟不影響其他功能。** 建立觸發規則時會收到「DSL engine is not installed」錯誤，但其他所有功能正常運作。
+
+若需修改 WASM（前端 DSL 編輯器）：
+
+```bash
+wasm-pack build --target web --out-dir pkg
+```
 
 ---
 

@@ -10,6 +10,7 @@
 - [專案結構](#專案結構)
 - [程式碼風格](#程式碼風格)
 - [測試](#測試)
+- [Rust DSL Engine 開發](#rust-dsl-engine-開發)
 - [Commit 規範](#commit-規範)
 - [Spectra 工作流程](#spectra-工作流程)
 - [Pull Request 流程](#pull-request-流程)
@@ -45,6 +46,11 @@ export REDIS_URL=redis://localhost:6379/0
 
 # 啟動開發伺服器（含熱重載）
 uv run fastapi dev src/main.py
+
+# （選用）安裝 Rust toolchain — 僅在修改 DSL 引擎時需要
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack
 ```
 
 開發伺服器預設在 `http://localhost:8000` 啟動，首次啟動會自動導向 Setup Wizard（設定精靈）。
@@ -77,6 +83,14 @@ src/
 ├── pages/                   # Web UI 頁面路由
 ├── shared/                  # 共用模組（資料庫、Redis、CSRF、Rate Limiter）
 └── templates/               # Jinja2 HTML 模板
+
+crates/dsl-engine/
+├── src/                     # Rust 原始碼（parser, validator, evaluator, complete, hover, describe, help）
+│   ├── wasm.rs              # WASM binding (wasm-bindgen)
+│   └── python.rs            # PyO3 binding
+├── dsl.pest                 # PEG grammar 定義
+├── pkg/                     # 預建 WASM npm package
+└── justfile                 # build 命令封裝
 ```
 
 每個模組通常包含 `models.py`（Beanie Document 定義）、`router.py`（FastAPI 路由）、`service.py`（商業邏輯）。
@@ -151,6 +165,41 @@ async def test_example(db):
     await user.insert()
     assert await User.count() == 1
 ```
+
+---
+
+## Rust DSL Engine 開發
+
+若需修改 DSL 引擎（`crates/dsl-engine/`），請先確認已安裝 Rust toolchain（參閱[安裝步驟](#安裝步驟)中的選用項目）。
+
+### WASM Build
+
+```bash
+cd crates/dsl-engine && wasm-pack build --target web --out-dir pkg
+```
+
+### PyO3 Build
+
+```bash
+cd crates/dsl-engine && maturin develop --features python
+```
+
+### 測試
+
+```bash
+cd crates/dsl-engine && cargo test --lib
+```
+
+### justfile 快捷命令
+
+| 命令 | 說明 |
+|------|------|
+| `just wasm` | 建置 WASM package |
+| `just python` | 建置 PyO3 binding |
+| `just test` | 執行 Rust 單元測試 |
+| `just all` | 執行以上全部步驟 |
+
+> **注意**：修改 Rust 程式碼後需重新 build WASM 和 PyO3 才能在前端/後端看到變更。
 
 ---
 

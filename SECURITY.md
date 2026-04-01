@@ -104,6 +104,45 @@
 - **mongo-express 預設停用**
   mongo-express 管理介面置於 Docker Profile 之下，預設不啟動，僅在開發需要時手動啟用，避免管理介面暴露於正式環境。
 
+### DSL 沙箱安全模型
+
+- **純求值引擎**
+  DSL 引擎為純求值引擎，不執行任何 I/O、資料庫查詢或網路呼叫。
+
+- **白名單制**
+  僅允許 7 個內建變數（`checkin_count`、`checkin_streak`、`submission_count`、`points`、`badge_count`、`event.type`、`event.occurred_at`）和 3 個內建函數（`count`、`day_of_week`）。
+
+- **表達式安全限制**
+  無賦值語句、無迴圈、無任意函數呼叫 — 表達式不可能無限執行。
+
+- **Class-scoped 資料隔離**
+  EvalContext 由 service 層從 CBAC 過濾後的資料組裝，DSL 引擎無法存取跨班級資料。
+
+- **執行環境隔離**
+  後端使用 PyO3 native binding 執行，前端使用 WASM 在瀏覽器沙箱中執行。
+
+### ClassMembership 唯一性保障
+
+- **唯一複合索引**
+  `(class_id, user_id)` unique compound index 防止資料庫層面的重複成員。
+
+- **原子操作保障**
+  `ensure_membership()` 使用 MongoDB atomic `update_one` + `upsert=True` + `$setOnInsert`，在並發請求下仍保持正確。
+
+- **所有建立路徑皆處理重複**
+  所有 4 個 membership 建立路徑（class 建立、邀請碼加入、公開加入、批次邀請）均處理 `DuplicateKeyError`。
+
+### Rich Text Editor 安全
+
+- **Milkdown 安全 DOM 操作**
+  Milkdown 基於 ProseMirror，使用 sanitized DOM 操作而非 innerHTML。
+
+- **CodeMirror 6 純文字處理**
+  CodeMirror 6 為純文字編輯器，不解釋或執行使用者輸入。
+
+- **WASM 瀏覽器沙箱隔離**
+  WASM 模組在瀏覽器沙箱中執行，無法存取 DOM、cookie 或 localStorage（除透過明確的 JS bridge）。
+
 ---
 
 ## 聯絡資訊
