@@ -1,0 +1,574 @@
+{% extends "shared/base.html" %}
+{% block title %}觸發規則管理 — {{ class_name }}{% endblock %}
+
+{% block head_extra %}
+{# ── CodeMirror 6 (ESM from CDN) ── #}
+<script type="importmap">
+{
+  "imports": {
+    "codemirror": "https://esm.sh/codemirror@6.0.1",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.36.8",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.5.2",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.11.0",
+    "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.18.6",
+    "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.8.5",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.8.1",
+    "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1"
+  }
+}
+</script>
+<style>
+  .cm-editor { height: auto; min-height: 80px; font-size: 14px; }
+  .cm-editor .cm-content { padding: 10px 14px; }
+  .cm-editor.cm-focused { outline: 2px solid rgb(139 92 246); outline-offset: -1px; border-radius: 8px; }
+  .cm-tooltip-autocomplete { font-size: 13px; }
+  .cm-diagnostic-error { border-bottom: 2px wavy #ef4444; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="font-heading font-bold text-2xl text-gray-900 dark:text-gray-100">觸發規則管理</h1>
+  <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">班級：<strong class="text-gray-700 dark:text-gray-300">{{ class_name }}</strong></p>
+</div>
+
+{# ── Create / Edit Rule Form ─────────────────────────────────────────────── #}
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200" id="form-title">新增規則</h2>
+    <button type="button" id="help-btn" title="DSL 說明"
+            class="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+      ?
+    </button>
+  </div>
+
+  <form id="rule-form">
+    <input type="hidden" id="rule-id" value="">
+
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">規則名稱</label>
+      <input type="text" id="rule-name" required placeholder="例：連續打卡7天"
+             class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">觸發條件（DSL 表達式）</label>
+      <div id="dsl-editor-mount" class="rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden min-h-[80px] bg-white dark:bg-gray-800"></div>
+      <input type="hidden" id="dsl-expression" value="">
+      <div id="dsl-diagnostics" class="mt-1.5 text-xs"></div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" id="save-btn"
+              class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors duration-150 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        <span id="save-btn-text">建立規則</span>
+      </button>
+      <button type="button" id="test-btn"
+              class="inline-flex items-center gap-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold px-5 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors duration-150 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+        </svg>
+        測試規則
+      </button>
+      <button type="button" id="cancel-edit-btn" class="hidden text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer">取消編輯</button>
+    </div>
+  </form>
+</div>
+
+{# ── Test Results Panel (hidden by default) ───────────────────────────────── #}
+<div id="test-results" class="hidden bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden mb-6">
+  <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200">規則測試結果</h2>
+    <button type="button" id="close-test-btn" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer">
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+    </button>
+  </div>
+  <div id="test-results-body" class="p-5">
+    {# Populated by JS #}
+  </div>
+</div>
+
+{# ── Rules List ───────────────────────────────────────────────────────────── #}
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+  <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200">已建立的規則</h2>
+  </div>
+
+  {% if rules %}
+  <div class="divide-y divide-gray-100 dark:divide-gray-800">
+    {% for item in rules %}
+    <div class="px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+         data-rule-id="{{ item.id }}">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-sm text-gray-900 dark:text-gray-100">{{ item.name }}</span>
+          {% if item.is_active %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">啟用</span>
+          {% else %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">停用</span>
+          {% endif %}
+          {% if item.bound_badge_count > 0 %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400">{{ item.bound_badge_count }} 徽章</span>
+          {% endif %}
+        </div>
+        <code class="block mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono truncate">{{ item.expression }}</code>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button" onclick="editRule('{{ item.id }}', '{{ item.name }}', '{{ item.expression }}', {{ item.is_active | tojson }})"
+                class="text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer" title="編輯">
+          <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
+        </button>
+        {% if item.bound_badge_count == 0 %}
+        <button type="button" onclick="deleteRule('{{ item.id }}', '{{ item.name }}')"
+                class="text-gray-400 hover:text-red-500 cursor-pointer" title="刪除">
+          <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+          </svg>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="px-5 py-10 text-center">
+    <p class="text-sm text-gray-500 dark:text-gray-400">尚未建立任何觸發規則</p>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">使用上方的表單來建立您的第一個規則</p>
+  </div>
+  {% endif %}
+</div>
+
+<script type="module">
+import { EditorView, keymap, placeholder as cmPlaceholder, tooltips } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
+import { StreamLanguage } from '@codemirror/language';
+import { autocompletion } from '@codemirror/autocomplete';
+import { linter, lintGutter } from '@codemirror/lint';
+import { defaultKeymap } from '@codemirror/commands';
+import { tags } from '@lezer/highlight';
+
+// ── DSL WASM module (lazy-loaded) ───────────────────────────────────────────
+let dsl = null;
+async function loadWasm() {
+  if (dsl) return dsl;
+  try {
+    const mod = await import('/static/dsl-engine/dsl_engine.js');
+    await mod.default();
+    dsl = mod;
+  } catch (e) {
+    console.warn('DSL WASM not available, editor will work without validation:', e);
+  }
+  return dsl;
+}
+loadWasm();
+
+// ── Simple tokenizer for DSL syntax highlighting ────────────────────────────
+const dslLanguage = StreamLanguage.define({
+  token(stream) {
+    if (stream.eatSpace()) return null;
+    // Keywords
+    if (stream.match(/\b(AND|OR|NOT)\b/i)) return 'keyword';
+    if (stream.match(/\b(true|false)\b/i)) return 'bool';
+    // Functions
+    if (stream.match(/\b(count|day_of_week)\b/)) return 'function';
+    // Time windows
+    if (stream.match(/\blast_\d+_days\b/)) return 'number';
+    // Operators
+    if (stream.match(/[><=!]=?/)) return 'operator';
+    // Strings
+    if (stream.match(/"[^"]*"/)) return 'string';
+    // Numbers
+    if (stream.match(/-?\d+(\.\d+)?/)) return 'number';
+    // Identifiers (variables)
+    if (stream.match(/[a-zA-Z_][a-zA-Z0-9_.]*/)) return 'variableName';
+    // Parens
+    if (stream.match(/[(),]/)) return 'paren';
+    stream.next();
+    return null;
+  },
+});
+
+// ── Linter extension (calls WASM validate) ──────────────────────────────────
+let validateTimeout;
+const dslLinter = linter(async (view) => {
+  if (!dsl) return [];
+  const src = view.state.doc.toString();
+  if (!src.trim()) return [];
+  try {
+    const result = JSON.parse(dsl.validate(src));
+    return result
+      .filter(d => d.severity === 'error')
+      .map(d => ({
+        from: d.span?.start ?? 0,
+        to: d.span?.end ?? src.length,
+        severity: 'error',
+        message: d.message,
+      }));
+  } catch { return []; }
+}, { delay: 50 });
+
+// ── Autocomplete (calls WASM complete) ──────────────────────────────────────
+function dslComplete(context) {
+  const word = context.matchBefore(/[\w.]*/);
+  if (!word || (word.from === word.to && !context.explicit)) return null;
+
+  if (dsl) {
+    try {
+      const suggestions = JSON.parse(dsl.complete(context.state.doc.toString(), word.to));
+      return {
+        from: word.from,
+        options: suggestions.map(s => ({
+          label: s.label,
+          type: s.kind,
+          detail: s.detail || undefined,
+          apply: s.insert_text,
+        })),
+      };
+    } catch {}
+  }
+
+  // Fallback: static suggestions
+  const builtins = [
+    { label: 'checkin_count', type: 'variable', detail: 'int' },
+    { label: 'checkin_streak', type: 'variable', detail: 'int' },
+    { label: 'submission_count', type: 'variable', detail: 'int' },
+    { label: 'points', type: 'variable', detail: 'int' },
+    { label: 'badge_count', type: 'variable', detail: 'int' },
+    { label: 'event.type', type: 'variable', detail: 'string' },
+    { label: 'count', type: 'function', detail: 'fn(source, window)', apply: 'count(' },
+    { label: 'day_of_week', type: 'function', detail: 'fn(datetime)', apply: 'day_of_week(' },
+    { label: 'AND', type: 'keyword' },
+    { label: 'OR', type: 'keyword' },
+    { label: 'NOT', type: 'keyword' },
+  ];
+  return { from: word.from, options: builtins.filter(b => b.label.toLowerCase().startsWith(word.text.toLowerCase())) };
+}
+
+// ── Hover tooltip (calls WASM hover_info) ───────────────────────────────────
+const dslHover = EditorView.domEventHandlers({});  // Simplified — full hover via hoverTooltip below
+
+const hoverTooltipExt = tooltips({
+  tooltipSpace: () => ({ top: 2, left: 2, bottom: 2, right: 2 }),
+});
+
+// ── Initialize CodeMirror ───────────────────────────────────────────────────
+const editorMount = document.getElementById('dsl-editor-mount');
+const hiddenInput = document.getElementById('dsl-expression');
+
+const editor = new EditorView({
+  doc: hiddenInput.value || '',
+  extensions: [
+    keymap.of(defaultKeymap),
+    dslLanguage,
+    lintGutter(),
+    dslLinter,
+    autocompletion({ override: [dslComplete] }),
+    cmPlaceholder('checkin_streak >= 7 AND submission_count >= 3'),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        hiddenInput.value = update.state.doc.toString();
+      }
+    }),
+    EditorView.theme({
+      '&': { borderRadius: '8px' },
+      '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace' },
+    }),
+  ],
+  parent: editorMount,
+});
+
+// Helper to get/set editor content
+function getExpression() { return editor.state.doc.toString().trim(); }
+function setExpression(text) {
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+}
+
+// ── Page logic (CRUD, test, etc.) ───────────────────────────────────────────
+const CLASS_ID = "{{ class_id }}";
+const API_BASE = `/classes/${CLASS_ID}/trigger-rules`;
+
+window.editRule = function(id, name, expression, isActive) {
+  document.getElementById('rule-id').value = id;
+  document.getElementById('rule-name').value = name;
+  setExpression(expression);
+  document.getElementById('form-title').textContent = '編輯規則';
+  document.getElementById('save-btn-text').textContent = '更新規則';
+  document.getElementById('cancel-edit-btn').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+  document.getElementById('rule-id').value = '';
+  document.getElementById('rule-name').value = '';
+  setExpression('');
+  document.getElementById('form-title').textContent = '新增規則';
+  document.getElementById('save-btn-text').textContent = '建立規則';
+  document.getElementById('cancel-edit-btn').classList.add('hidden');
+});
+
+document.getElementById('rule-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('rule-id').value;
+  const name = document.getElementById('rule-name').value.trim();
+  const expression = getExpression();
+  if (!name || !expression) return;
+
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `${API_BASE}/${id}` : API_BASE;
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, expression }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      Modal.alert(err.detail || '操作失敗');
+      return;
+    }
+    location.reload();
+  } catch (err) {
+    Modal.alert('網路錯誤，請稍後重試');
+  }
+});
+
+window.deleteRule = function(id, name) {
+  Modal.confirm(`確定要刪除規則「${name}」嗎？`, async () => {
+    try {
+      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json();
+        Modal.alert(err.detail || '刪除失敗');
+        return;
+      }
+      location.reload();
+    } catch (err) {
+      Modal.alert('網路錯誤');
+    }
+  });
+};
+
+// ── Test rule (dry-run with WASM evaluate) ──────────────────────────────────
+document.getElementById('test-btn').addEventListener('click', async () => {
+  const expression = getExpression();
+  if (!expression) { Modal.alert('請先輸入 DSL 表達式'); return; }
+
+  // Check for validation errors first
+  if (dsl) {
+    const diags = JSON.parse(dsl.validate(expression));
+    const errors = diags.filter(d => d.severity === 'error');
+    if (errors.length > 0) {
+      Modal.alert('表達式有錯誤，請先修正：\n' + errors.map(e => e.message).join('\n'));
+      return;
+    }
+  }
+
+  try {
+    const res = await fetch(`/classes/${CLASS_ID}/students/stats?windows=7,14,30`);
+    if (!res.ok) { Modal.alert('無法取得學生資料'); return; }
+    const students = await res.json();
+    displayTestResults(expression, students);
+  } catch (err) {
+    Modal.alert('網路錯誤');
+  }
+});
+
+function displayTestResults(expression, students) {
+  const panel = document.getElementById('test-results');
+  const body = document.getElementById('test-results-body');
+  panel.classList.remove('hidden');
+
+  if (students.length === 0) {
+    body.innerHTML = '<p class="text-sm text-gray-500">此班級沒有學生</p>';
+    return;
+  }
+
+  let matchCount = 0;
+  const rows = students.map(s => {
+    let passed = null;
+    if (dsl) {
+      try {
+        const ctx = JSON.stringify({ values: {
+          checkin_count: s.checkin_count,
+          checkin_streak: s.checkin_streak,
+          submission_count: s.submission_count,
+          points: s.points,
+          badge_count: s.badge_count,
+          'event.type': 'manual',
+          'event.occurred_at.day_of_week': new Date().getDay() === 0 ? 6 : new Date().getDay() - 1,
+          ...Object.fromEntries(Object.entries(s).filter(([k]) => k.match(/_(last_\d+_days)$/)))
+        }});
+        const result = JSON.parse(dsl.evaluate(expression, ctx));
+        passed = result.ok ? result.result : null;
+      } catch {}
+    }
+    if (passed === true) matchCount++;
+    return { ...s, passed };
+  });
+
+  let html = `<div class="flex items-center gap-3 mb-4">`;
+  html += `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">✅ 符合：${matchCount} 人</span>`;
+  html += `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">❌ 不符合：${students.length - matchCount} 人</span>`;
+  html += `</div>`;
+
+  html += '<div class="overflow-x-auto"><table class="w-full text-sm">';
+  html += '<thead><tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">';
+  html += '<th class="pb-2 pr-3 font-medium">結果</th><th class="pb-2 pr-3 font-medium">學生</th><th class="pb-2 pr-3 font-medium">連續打卡</th><th class="pb-2 pr-3 font-medium">繳交次數</th><th class="pb-2 pr-3 font-medium">點數</th><th class="pb-2 font-medium">徽章數</th>';
+  html += '</tr></thead><tbody>';
+
+  // Show matches first, then non-matches
+  const sorted = [...rows].sort((a, b) => (b.passed === true ? 1 : 0) - (a.passed === true ? 1 : 0));
+  for (const s of sorted) {
+    const icon = s.passed === true ? '✅' : s.passed === false ? '❌' : '—';
+    const rowClass = s.passed === true ? 'bg-green-50 dark:bg-green-900/10' : '';
+    html += `<tr class="border-b border-gray-100 dark:border-gray-800 ${rowClass}">`;
+    html += `<td class="py-2 pr-3">${icon}</td>`;
+    html += `<td class="py-2 pr-3 font-medium text-gray-900 dark:text-gray-100">${s.name}</td>`;
+    html += `<td class="py-2 pr-3">${s.checkin_streak}</td>`;
+    html += `<td class="py-2 pr-3">${s.submission_count}</td>`;
+    html += `<td class="py-2 pr-3">${s.points}</td>`;
+    html += `<td class="py-2">${s.badge_count}</td>`;
+    html += `</tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  if (!dsl) {
+    html += `<p class="text-xs text-amber-500 mt-3">⚠️ WASM 模組未載入，無法進行前端評估。僅顯示學生資料。</p>`;
+  }
+
+  body.innerHTML = html;
+}
+
+document.getElementById('close-test-btn').addEventListener('click', () => {
+  document.getElementById('test-results').classList.add('hidden');
+});
+
+// ── DSL Help Modal ──────────────────────────────────────────────────────────
+document.getElementById('help-btn').addEventListener('click', async () => {
+  let htmlContent = '';
+
+  if (dsl) {
+    try {
+      const help = JSON.parse(dsl.get_help_content('tw'));
+
+      // Variables table
+      htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F4CA} 可用變數</h3>`;
+      htmlContent += `<div class="overflow-x-auto mb-5"><table class="w-full text-sm border-collapse">`;
+      htmlContent += `<thead><tr class="text-left border-b border-gray-200 dark:border-gray-700"><th class="pb-2 pr-3 font-medium">名稱</th><th class="pb-2 pr-3 font-medium">類型</th><th class="pb-2 font-medium">說明</th></tr></thead><tbody>`;
+      for (const v of help.variables) {
+        htmlContent += `<tr class="border-b border-gray-100 dark:border-gray-800"><td class="py-1.5 pr-3"><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${v.name}</code></td><td class="py-1.5 pr-3 text-gray-500 text-xs">${v.type}</td><td class="py-1.5 text-gray-600 dark:text-gray-400">${v.description}</td></tr>`;
+      }
+      htmlContent += `</tbody></table></div>`;
+
+      // Operators list
+      htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F527} 運算子</h3>`;
+      htmlContent += `<ul class="list-none space-y-1 mb-5 text-sm">`;
+      for (const op of help.operators) {
+        htmlContent += `<li><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${op.symbol}</code> — ${op.description}</li>`;
+      }
+      htmlContent += `</ul>`;
+
+      // Functions
+      htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F4D0} 函數</h3>`;
+      htmlContent += `<div class="space-y-3 mb-5">`;
+      for (const fn of help.functions) {
+        htmlContent += `<div>`;
+        htmlContent += `<code class="text-sm font-semibold bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded block mb-1">${fn.signature}</code>`;
+        htmlContent += `<p class="text-sm text-gray-600 dark:text-gray-400 mb-1">${fn.description}</p>`;
+        htmlContent += `<pre class="text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-2 overflow-x-auto"><code>${fn.example}</code></pre>`;
+        htmlContent += `</div>`;
+      }
+      htmlContent += `</div>`;
+
+      // Examples
+      htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F4A1} 範例</h3>`;
+      htmlContent += `<div class="space-y-2">`;
+      for (const ex of help.examples) {
+        htmlContent += `<div>`;
+        htmlContent += `<pre class="text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-2 overflow-x-auto mb-1"><code>${ex.expression}</code></pre>`;
+        htmlContent += `<p class="text-sm text-gray-600 dark:text-gray-400">${ex.description}</p>`;
+        htmlContent += `</div>`;
+      }
+      htmlContent += `</div>`;
+
+      Modal.alert(htmlContent);
+      return;
+    } catch (e) {
+      console.warn('Failed to get WASM help content, using fallback:', e);
+    }
+  }
+
+  // Static fallback when WASM is not loaded
+  htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F4CA} 可用變數</h3>`;
+  htmlContent += `<div class="overflow-x-auto mb-5"><table class="w-full text-sm border-collapse">`;
+  htmlContent += `<thead><tr class="text-left border-b border-gray-200 dark:border-gray-700"><th class="pb-2 pr-3 font-medium">名稱</th><th class="pb-2 pr-3 font-medium">類型</th><th class="pb-2 font-medium">說明</th></tr></thead><tbody>`;
+  const fallbackVars = [
+    { name: 'checkin_count', type: 'int', desc: '打卡總次數' },
+    { name: 'checkin_streak', type: 'int', desc: '目前連續打卡天數' },
+    { name: 'submission_count', type: 'int', desc: '繳交次數' },
+    { name: 'points', type: 'int', desc: '目前累積點數' },
+    { name: 'badge_count', type: 'int', desc: '已獲得徽章數' },
+    { name: 'event.type', type: 'string', desc: '觸發事件類型（checkin, submission 等）' },
+  ];
+  for (const v of fallbackVars) {
+    htmlContent += `<tr class="border-b border-gray-100 dark:border-gray-800"><td class="py-1.5 pr-3"><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${v.name}</code></td><td class="py-1.5 pr-3 text-gray-500 text-xs">${v.type}</td><td class="py-1.5 text-gray-600 dark:text-gray-400">${v.desc}</td></tr>`;
+  }
+  htmlContent += `</tbody></table></div>`;
+
+  htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F527} 運算子</h3>`;
+  htmlContent += `<ul class="list-none space-y-1 mb-5 text-sm">`;
+  const fallbackOps = [
+    { sym: '==', desc: '等於' }, { sym: '!=', desc: '不等於' },
+    { sym: '>', desc: '大於' }, { sym: '>=', desc: '大於或等於' },
+    { sym: '<', desc: '小於' }, { sym: '<=', desc: '小於或等於' },
+    { sym: 'AND', desc: '且（兩個條件都須成立）' },
+    { sym: 'OR', desc: '或（任一條件成立即可）' },
+    { sym: 'NOT', desc: '非（反轉條件結果）' },
+  ];
+  for (const op of fallbackOps) {
+    htmlContent += `<li><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${op.sym}</code> — ${op.desc}</li>`;
+  }
+  htmlContent += `</ul>`;
+
+  htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F4D0} 函數</h3>`;
+  htmlContent += `<div class="space-y-3 mb-5">`;
+  const fallbackFns = [
+    { sig: 'count(source, window)', desc: '計算指定來源在時間區間內的數量', ex: 'count("checkin", last_7_days) >= 5' },
+    { sig: 'day_of_week(datetime)', desc: '取得日期是星期幾（0=一, 6=日）', ex: 'day_of_week(event.occurred_at) == 4' },
+  ];
+  for (const fn of fallbackFns) {
+    htmlContent += `<div>`;
+    htmlContent += `<code class="text-sm font-semibold bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded block mb-1">${fn.sig}</code>`;
+    htmlContent += `<p class="text-sm text-gray-600 dark:text-gray-400 mb-1">${fn.desc}</p>`;
+    htmlContent += `<pre class="text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-2 overflow-x-auto"><code>${fn.ex}</code></pre>`;
+    htmlContent += `</div>`;
+  }
+  htmlContent += `</div>`;
+
+  htmlContent += `<h3 class="font-semibold text-base mb-2">\u{1F4A1} 範例</h3>`;
+  htmlContent += `<div class="space-y-2">`;
+  const fallbackExamples = [
+    { expr: 'checkin_streak >= 7', desc: '連續打卡 7 天以上' },
+    { expr: 'checkin_streak >= 7 AND submission_count >= 3', desc: '連續打卡 7 天且繳交至少 3 次' },
+    { expr: 'count("checkin", last_30_days) >= 20', desc: '30 天內打卡至少 20 次' },
+    { expr: 'points >= 100 OR badge_count >= 5', desc: '累積 100 點或獲得 5 個徽章' },
+  ];
+  for (const ex of fallbackExamples) {
+    htmlContent += `<div>`;
+    htmlContent += `<pre class="text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-2 overflow-x-auto mb-1"><code>${ex.expr}</code></pre>`;
+    htmlContent += `<p class="text-sm text-gray-600 dark:text-gray-400">${ex.desc}</p>`;
+    htmlContent += `</div>`;
+  }
+  htmlContent += `</div>`;
+
+  Modal.alert(htmlContent);
+});
+</script>
+{% endblock %}

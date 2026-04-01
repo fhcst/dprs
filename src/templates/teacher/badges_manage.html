@@ -1,0 +1,439 @@
+{% extends "shared/base.html" %}
+{% block title %}徽章管理 — {{ class_name }}{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Milkdown editor chrome */
+  .milkdown-wrap { min-height: 120px; }
+  .milkdown-wrap .milkdown { outline: none; }
+  .milkdown-wrap .milkdown .editor { min-height: 100px; padding: 12px 16px; }
+  .milkdown-wrap .milkdown p { margin: 0.35em 0; }
+  .milkdown-wrap .milkdown h1,
+  .milkdown-wrap .milkdown h2,
+  .milkdown-wrap .milkdown h3 { font-weight: 700; margin: 0.5em 0 0.25em; }
+  .milkdown-wrap .milkdown ul,
+  .milkdown-wrap .milkdown ol { padding-left: 1.5em; margin: 0.35em 0; }
+  .milkdown-wrap .milkdown blockquote { border-left: 3px solid #8b5cf6; padding-left: 12px; color: #6b7280; }
+  .milkdown-wrap .milkdown code { background: rgba(139,92,246,0.08); padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+  .milkdown-wrap .milkdown pre { background: rgba(0,0,0,0.04); padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+  .dark .milkdown-wrap .milkdown pre { background: rgba(255,255,255,0.05); }
+  .dark .milkdown-wrap .milkdown blockquote { border-left-color: #a78bfa; color: #9ca3af; }
+  .dark .milkdown-wrap .milkdown code { background: rgba(139,92,246,0.15); }
+
+  /* G2 dual-zone separator */
+  .g2-auto-zone {
+    background: linear-gradient(135deg, rgba(139,92,246,0.04), rgba(139,92,246,0.08));
+    border: 1px solid rgba(139,92,246,0.18);
+  }
+  .dark .g2-auto-zone {
+    background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(139,92,246,0.12));
+    border-color: rgba(139,92,246,0.25);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="font-heading font-bold text-2xl text-gray-900 dark:text-gray-100">徽章管理</h1>
+  <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">班級：<strong class="text-gray-700 dark:text-gray-300">{{ class_name }}</strong></p>
+</div>
+
+{# ── Create / Edit Badge Form ─────────────────────────────────────────────── #}
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+  <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200 mb-4" id="form-title">新增徽章</h2>
+
+  <form id="badge-form">
+    <input type="hidden" id="badge-id" value="">
+
+    {# ── Row 1: Name + Icon ── #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">徽章名稱</label>
+        <input type="text" id="badge-name" required placeholder="例：連續打卡達人"
+               class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">圖示（Emoji）</label>
+        <input type="text" id="badge-icon" value="" placeholder="🏅" maxlength="8"
+               class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 text-center focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+      </div>
+    </div>
+
+    {# ── Row 2: Trigger source selector ── #}
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">觸發來源</label>
+      <div class="flex flex-wrap gap-4">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="trigger_source" value="manual" checked
+                 class="w-4 h-4 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+          <span class="text-sm text-gray-700 dark:text-gray-300">手動頒發</span>
+        </label>
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="trigger_source" value="trigger_key"
+                 class="w-4 h-4 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+          <span class="text-sm text-gray-700 dark:text-gray-300">內建觸發器 (trigger_key)</span>
+        </label>
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="trigger_source" value="trigger_rule_id"
+                 class="w-4 h-4 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+          <span class="text-sm text-gray-700 dark:text-gray-300">DSL 觸發規則 (trigger_rule_id)</span>
+        </label>
+      </div>
+    </div>
+
+    {# ── Conditional: trigger_key input ── #}
+    <div id="trigger-key-section" class="hidden mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">觸發器鍵值</label>
+      <input type="text" id="trigger-key-input" placeholder="例：checkin_streak_7"
+             class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+    </div>
+
+    {# ── Conditional: trigger_rule_id dropdown ── #}
+    <div id="trigger-rule-section" class="hidden mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">選擇 DSL 觸發規則</label>
+      <select id="trigger-rule-select"
+              class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+        <option value="">— 請選擇規則 —</option>
+        {% for r in trigger_rules %}
+        <option value="{{ r.id }}" data-expression="{{ r.expression }}">{{ r.name }}（{{ r.expression[:60] }}{% if r.expression|length > 60 %}…{% endif %}）</option>
+        {% endfor %}
+      </select>
+      {% if not trigger_rules %}
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        尚無觸發規則 —
+        <a href="{{ url_for('trigger_rules_page', class_id=class_id) }}" class="text-brand-600 dark:text-brand-400 hover:underline">前往建立</a>
+      </p>
+      {% endif %}
+    </div>
+
+    {# ── Row 3: Description with G2 dual-zone layout ── #}
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">徽章說明</label>
+
+      <div class="rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-transparent transition-shadow duration-150">
+        {# ── G2 Upper Zone: auto-generated condition summary (visible only when rule bound) ── #}
+        <div id="g2-auto-zone" class="hidden g2-auto-zone px-4 py-3">
+          <div class="flex items-center gap-2 mb-1.5">
+            <svg class="w-4 h-4 text-brand-500 dark:text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+            </svg>
+            <span class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wide">自動產生的觸發條件摘要</span>
+          </div>
+          <p id="g2-auto-text" class="text-sm text-gray-700 dark:text-gray-300 font-mono leading-relaxed"></p>
+        </div>
+
+        {# ── G2 Separator (visible only when auto-zone is shown) ── #}
+        <div id="g2-separator" class="hidden border-t border-brand-200 dark:border-brand-800"></div>
+
+        {# ── G2 Lower Zone: Milkdown WYSIWYG editor ── #}
+        <div id="milkdown-editor" class="milkdown-wrap bg-white dark:bg-gray-800"></div>
+      </div>
+      <input type="hidden" id="badge-description" value="">
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">支援 Markdown 格式：粗體、列表、引用等</p>
+    </div>
+
+    {# ── Actions ── #}
+    <div class="flex items-center gap-3">
+      <button type="submit" id="save-btn"
+              class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors duration-150 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        <span id="save-btn-text">建立徽章</span>
+      </button>
+      <button type="button" id="cancel-edit-btn" class="hidden text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer">取消編輯</button>
+    </div>
+  </form>
+</div>
+
+{# ── Existing Badges List ─────────────────────────────────────────────────── #}
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+  <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200">已建立的徽章</h2>
+  </div>
+
+  {% if badges %}
+  <div class="divide-y divide-gray-100 dark:divide-gray-800">
+    {% for b in badges %}
+    <div class="px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+         data-badge-id="{{ b.id }}">
+      <div class="flex items-center gap-3 min-w-0 flex-1">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900 dark:to-brand-800 flex items-center justify-center text-xl shrink-0 ring-2 ring-brand-100 dark:ring-brand-900">
+          {{ b.icon }}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-sm text-gray-900 dark:text-gray-100">{{ b.name }}</span>
+            {% if b.trigger_key %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">觸發器：{{ b.trigger_key }}</span>
+            {% elif b.trigger_rule_id %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400">DSL 規則</span>
+            {% else %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">手動</span>
+            {% endif %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">{{ b.award_count }} 人獲得</span>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ b.description[:80] }}{% if b.description|length > 80 %}…{% endif %}</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button"
+                onclick="editBadge({{ b | tojson }})"
+                class="text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer" title="編輯">
+          <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
+        </button>
+        {% if b.award_count == 0 %}
+        <button type="button"
+                onclick="deleteBadge('{{ b.id }}', '{{ b.name }}')"
+                class="text-gray-400 hover:text-red-500 cursor-pointer" title="刪除">
+          <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+          </svg>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="px-5 py-10 text-center">
+    <p class="text-sm text-gray-500 dark:text-gray-400">尚未建立任何徽章</p>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">使用上方的表單來建立您的第一個徽章</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+// ── Milkdown WYSIWYG Editor (ESM CDN) ──────────────────────────────────────
+import { Editor, rootCtx, defaultValueCtx } from 'https://esm.sh/@milkdown/core@7.5.0';
+import { commonmark } from 'https://esm.sh/@milkdown/preset-commonmark@7.5.0';
+import { nord } from 'https://esm.sh/@milkdown/theme-nord@7.5.0';
+import { replaceAll, getMarkdown } from 'https://esm.sh/@milkdown/utils@7.5.0';
+
+// ── DSL WASM module (lazy-loaded for describe()) ────────────────────────────
+let dsl = null;
+async function loadWasm() {
+  if (dsl) return dsl;
+  try {
+    const mod = await import('/static/dsl-engine/dsl_engine.js');
+    await mod.default();
+    dsl = mod;
+  } catch (e) {
+    console.warn('DSL WASM not available, will show raw expression:', e);
+  }
+  return dsl;
+}
+loadWasm();
+
+// ── Constants ───────────────────────────────────────────────────────────────
+const CLASS_ID = "{{ class_id }}";
+const API_BASE = `/classes/${CLASS_ID}/badges`;
+
+// ── Milkdown init ───────────────────────────────────────────────────────────
+let editorInstance = null;
+
+async function initMilkdown(initialValue = '') {
+  const mount = document.getElementById('milkdown-editor');
+  mount.innerHTML = '';
+
+  editorInstance = await Editor.make()
+    .config((ctx) => {
+      ctx.set(rootCtx, mount);
+      ctx.set(defaultValueCtx, initialValue);
+    })
+    .config(nord)
+    .use(commonmark)
+    .create();
+}
+
+function getEditorMarkdown() {
+  if (!editorInstance) return '';
+  try {
+    return editorInstance.action(getMarkdown());
+  } catch {
+    return '';
+  }
+}
+
+function setEditorMarkdown(md) {
+  if (!editorInstance) return;
+  try {
+    editorInstance.action(replaceAll(md));
+  } catch {
+    // Fallback: re-init
+    initMilkdown(md);
+  }
+}
+
+await initMilkdown('');
+
+// ── Trigger source radio switching ──────────────────────────────────────────
+const triggerRadios = document.querySelectorAll('input[name="trigger_source"]');
+const triggerKeySection = document.getElementById('trigger-key-section');
+const triggerRuleSection = document.getElementById('trigger-rule-section');
+const g2AutoZone = document.getElementById('g2-auto-zone');
+const g2Separator = document.getElementById('g2-separator');
+const g2AutoText = document.getElementById('g2-auto-text');
+const triggerRuleSelect = document.getElementById('trigger-rule-select');
+
+function updateTriggerSections() {
+  const selected = document.querySelector('input[name="trigger_source"]:checked').value;
+
+  triggerKeySection.classList.toggle('hidden', selected !== 'trigger_key');
+  triggerRuleSection.classList.toggle('hidden', selected !== 'trigger_rule_id');
+
+  if (selected === 'trigger_rule_id') {
+    updateG2Zone();
+  } else {
+    g2AutoZone.classList.add('hidden');
+    g2Separator.classList.add('hidden');
+  }
+}
+
+triggerRadios.forEach(r => r.addEventListener('change', updateTriggerSections));
+
+// ── G2 auto-description generation ──────────────────────────────────────────
+function updateG2Zone() {
+  const opt = triggerRuleSelect.selectedOptions[0];
+  if (!opt || !opt.value) {
+    g2AutoZone.classList.add('hidden');
+    g2Separator.classList.add('hidden');
+    return;
+  }
+
+  const expression = opt.dataset.expression || '';
+  let summary = expression;
+
+  // Try WASM describe() for human-readable summary
+  if (dsl && typeof dsl.describe === 'function') {
+    try {
+      summary = dsl.describe(expression);
+    } catch {
+      // Fallback to raw expression
+    }
+  }
+
+  g2AutoText.textContent = summary;
+  g2AutoZone.classList.remove('hidden');
+  g2Separator.classList.remove('hidden');
+}
+
+triggerRuleSelect.addEventListener('change', updateG2Zone);
+
+// ── Form submission (Create / Update) ───────────────────────────────────────
+document.getElementById('badge-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const id = document.getElementById('badge-id').value;
+  const name = document.getElementById('badge-name').value.trim();
+  const icon = document.getElementById('badge-icon').value.trim() || '\u{1F3C5}';
+  const description = getEditorMarkdown().trim();
+  const triggerSource = document.querySelector('input[name="trigger_source"]:checked').value;
+
+  if (!name) { Modal.alert('請輸入徽章名稱'); return; }
+  if (!description) { Modal.alert('請輸入徽章說明'); return; }
+
+  const payload = { name, description, icon };
+
+  if (triggerSource === 'trigger_key') {
+    const key = document.getElementById('trigger-key-input').value.trim();
+    if (!key) { Modal.alert('請輸入觸發器鍵值'); return; }
+    payload.trigger_key = key;
+  } else if (triggerSource === 'trigger_rule_id') {
+    const ruleId = triggerRuleSelect.value;
+    if (!ruleId) { Modal.alert('請選擇 DSL 觸發規則'); return; }
+    payload.trigger_rule_id = ruleId;
+  }
+
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `${API_BASE}/${id}` : API_BASE;
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      Modal.alert(err.detail || '操作失敗');
+      return;
+    }
+    location.reload();
+  } catch (err) {
+    Modal.alert('網路錯誤，請稍後重試');
+  }
+});
+
+// ── Edit badge (populate form) ──────────────────────────────────────────────
+window.editBadge = function(badge) {
+  document.getElementById('badge-id').value = badge.id;
+  document.getElementById('badge-name').value = badge.name;
+  document.getElementById('badge-icon').value = badge.icon;
+
+  // Set trigger source radio
+  let source = 'manual';
+  if (badge.trigger_key) source = 'trigger_key';
+  else if (badge.trigger_rule_id) source = 'trigger_rule_id';
+
+  document.querySelectorAll('input[name="trigger_source"]').forEach(r => {
+    r.checked = r.value === source;
+  });
+
+  if (source === 'trigger_key') {
+    document.getElementById('trigger-key-input').value = badge.trigger_key || '';
+  } else if (source === 'trigger_rule_id') {
+    triggerRuleSelect.value = badge.trigger_rule_id || '';
+  }
+
+  updateTriggerSections();
+  setEditorMarkdown(badge.description || '');
+
+  document.getElementById('form-title').textContent = '編輯徽章';
+  document.getElementById('save-btn-text').textContent = '更新徽章';
+  document.getElementById('cancel-edit-btn').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+// ── Cancel edit ─────────────────────────────────────────────────────────────
+document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+  document.getElementById('badge-id').value = '';
+  document.getElementById('badge-name').value = '';
+  document.getElementById('badge-icon').value = '';
+  document.getElementById('trigger-key-input').value = '';
+  triggerRuleSelect.value = '';
+
+  document.querySelectorAll('input[name="trigger_source"]').forEach(r => {
+    r.checked = r.value === 'manual';
+  });
+  updateTriggerSections();
+  setEditorMarkdown('');
+
+  document.getElementById('form-title').textContent = '新增徽章';
+  document.getElementById('save-btn-text').textContent = '建立徽章';
+  document.getElementById('cancel-edit-btn').classList.add('hidden');
+});
+
+// ── Delete badge ────────────────────────────────────────────────────────────
+window.deleteBadge = function(id, name) {
+  Modal.confirm(`確定要刪除徽章「${name}」嗎？此操作無法復原。`, async () => {
+    try {
+      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Modal.alert(err.detail || '刪除失敗');
+        return;
+      }
+      location.reload();
+    } catch (err) {
+      Modal.alert('網路錯誤');
+    }
+  });
+};
+</script>
+{% endblock %}

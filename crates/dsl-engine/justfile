@@ -1,0 +1,36 @@
+# DSL Engine build commands
+
+# Build WASM package for frontend
+wasm:
+    wasm-pack build --target web --out-dir pkg
+    @echo "✓ WASM package built at crates/dsl-engine/pkg/"
+
+# Build WASM with optimization
+wasm-release:
+    wasm-pack build --target web --out-dir pkg --release
+    @echo "✓ WASM release package built at crates/dsl-engine/pkg/"
+
+# Build and install PyO3 wheel for development
+python:
+    cd ../.. && uv tool run maturin develop --manifest-path crates/dsl-engine/Cargo.toml --features python
+    @echo "✓ PyO3 wheel installed (editable)"
+
+# Build PyO3 wheel for distribution
+python-release:
+    cd ../.. && uv tool run maturin build --manifest-path crates/dsl-engine/Cargo.toml --features python --release
+    @echo "✓ PyO3 release wheel built"
+
+# Run Rust tests
+test:
+    cargo test --lib
+    @echo "✓ All Rust tests passed"
+
+# Build all targets
+all: test wasm python
+    @echo "✓ All targets built successfully"
+
+# Clean build artifacts
+clean:
+    cargo clean
+    rm -rf pkg/
+    @echo "✓ Cleaned"

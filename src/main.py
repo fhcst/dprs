@@ -21,6 +21,7 @@ def _collect_document_models():
     from tasks.checkin.models import CheckinConfig, DailyCheckinOverride, CheckinRecord, AttendanceCorrection
     from gamification.points.models import PointTransaction, ClassPointConfig
     from gamification.badges.models import BadgeDefinition, BadgeAward
+    from gamification.triggers.models import TriggerRule
     from community.feed.models import FeedPost, Reaction
     from gamification.prizes.models import Prize
     from core.system.models import SystemConfig
@@ -29,7 +30,7 @@ def _collect_document_models():
         TaskTemplate, TaskAssignment, TaskScheduleRule, TaskSubmission,
         CheckinConfig, DailyCheckinOverride, CheckinRecord, AttendanceCorrection,
         PointTransaction, ClassPointConfig,
-        BadgeDefinition, BadgeAward,
+        BadgeDefinition, BadgeAward, TriggerRule,
         FeedPost, Reaction,
         Prize,
         SystemConfig,
@@ -122,6 +123,7 @@ from tasks.submissions.router import router as submissions_router
 from tasks.checkin.router import router as checkin_router
 from gamification.points.router import router as points_router
 from gamification.badges.router import router as badges_router
+from gamification.triggers.router import router as triggers_router
 from community.feed.router import router as feed_router
 from gamification.prizes.router import router as prizes_router
 from gamification.leaderboard.router import router as leaderboard_router
@@ -137,6 +139,7 @@ app.include_router(submissions_router)
 app.include_router(checkin_router)
 app.include_router(points_router)
 app.include_router(badges_router)
+app.include_router(triggers_router)
 app.include_router(feed_router)
 app.include_router(prizes_router)
 app.include_router(leaderboard_router)

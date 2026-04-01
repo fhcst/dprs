@@ -57,9 +57,9 @@ class ExtensionRegistry:
             )
         return bucket[key]
 
-    def get_all(self, protocol: type) -> list[Any]:
-        """Return all implementations registered for a protocol."""
-        return list(self._store.get(protocol, {}).values())
+    def get_all(self, protocol: type) -> dict[str, Any]:
+        """Return all implementations registered for a protocol, keyed by name."""
+        return dict(self._store.get(protocol, {}))
 
 
 # Module-level singleton
