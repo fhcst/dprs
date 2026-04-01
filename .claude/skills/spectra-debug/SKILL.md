@@ -1,6 +1,7 @@
 ---
 name: spectra-debug
 description: "Systematically debug a problem using a four-phase workflow"
+effort: high
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
