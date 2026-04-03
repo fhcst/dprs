@@ -58,43 +58,77 @@ tests:
 ---
 ### Requirement: Student joins a class
 
-Students SHALL be able to join a class using a class invite code or by browsing public classes. A student MUST be able to join multiple classes simultaneously. When joining via invite code, the system SHALL create a `JoinRequest` with status `pending` instead of directly creating a `ClassMembership`. The student SHALL be informed that their request is pending teacher review. Joining a public class SHALL continue to add the student as a member directly without requiring review.
+The system SHALL NOT create duplicate ClassMembership records. Before inserting a new ClassMembership, the service layer SHALL check if a membership already exists for the given (class_id, user_id) pair. If a membership already exists, the insert SHALL be skipped silently. This applies to all membership creation paths: join-request approval, batch invite, and direct join.
 
-#### Scenario: Student submits invite code to request joining
+#### Scenario: Approval does not duplicate existing membership
 
-- **WHEN** a student submits a valid invite code
-- **THEN** the system SHALL create a `JoinRequest` with status `pending` for the corresponding class and return a message indicating the request is awaiting teacher review
+- **WHEN** a join request is approved for a student who already has a ClassMembership in that class
+- **THEN** the system SHALL NOT insert a second ClassMembership record
 
-#### Scenario: Student joins a public class
+#### Scenario: First-time approval creates membership
 
-- **WHEN** a student selects a public class from the class browser
-- **THEN** the system SHALL add the student as a member directly (no review required)
-
-#### Scenario: Student already a member
-
-- **WHEN** a student attempts to join a class they already belong to
-- **THEN** the system SHALL return an informational message and SHALL NOT create a duplicate membership or join request
+- **WHEN** a join request is approved for a student who has no existing ClassMembership in that class
+- **THEN** the system SHALL insert a new ClassMembership record with role "student"
 
 
 <!-- @trace
-source: invite-code-join-review
-updated: 2026-03-25
+source: fix-codex-review-findings
+updated: 2026-04-03
 code:
-  - scripts/migrations/20260325_004_join_request_index.py
-  - src/main.py
-  - src/shared/page_context.py
-  - uv.lock
-  - src/pages/router.py
-  - src/templates/teacher/class_members.html
-  - src/core/classes/router.py
-  - src/core/classes/service.py
-  - src/templates/student/dashboard.html
-  - src/core/classes/models.py
-  - src/core/system/router.py
-  - src/core/system/models.py
-  - src/templates/admin/system_settings.html
-tests:
-  - tests/test_join_requests.py
+  - .agents/workflows
+  - .agents/skills/spectra-discuss
+  - .agents/workflows/spectra-ingest.md
+  - .github/skills/spectra-ask/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-002.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-004.md
+  - .github/prompts/spectra-debug.prompt.md
+  - .github/prompts/spectra-propose.prompt.md
+  - .github/skills/spectra-archive/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-005.md
+  - .security-audit/active/dprs-full-review-2026-04-02/scope.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/workflows/spectra-ask.md
+  - .github/skills/spectra-audit/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/.audit.yaml
+  - .agents/workflows/spectra-archive.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-003.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-ingest
+  - .agents/workflows/spectra-apply.md
+  - .github/skills/spectra-apply/SKILL.md
+  - .github/skills/spectra-propose/SKILL.md
+  - AGENTS.md
+  - .agents/workflows/spectra-propose.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .github/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-audit
+  - .security-audit/active/dprs-full-review-2026-04-02/tasks.md
+  - .github/prompts/spectra-archive.prompt.md
+  - .agents/skills/spectra-debug
+  - GEMINI.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-001.md
+  - .agents/skills/spectra-audit/SKILL.md
+  - .github/prompts/spectra-apply.prompt.md
+  - .github/skills/spectra-ingest/SKILL.md
+  - .github/prompts/spectra-ask.prompt.md
+  - .github/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-apply
+  - .agents/skills
+  - .agents/skills/spectra-propose
+  - .github/prompts/spectra-discuss.prompt.md
+  - .github/prompts/spectra-ingest.prompt.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-archive
+  - .agents/skills/spectra-ask
+  - .github/prompts/spectra-audit.prompt.md
+  - .security-audit/active/dprs-full-review-2026-04-02/plan.md
+  - .agents/workflows/spectra-debug.md
+  - .agents/skills/spectra-ingest/SKILL.md
+  - .codex/environments/environment.toml
+  - .agents/workflows/spectra-audit.md
+  - .agents/workflows/spectra-discuss.md
 -->
 
 ---

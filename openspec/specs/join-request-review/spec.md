@@ -186,53 +186,82 @@ tests:
 ---
 ### Requirement: Teacher reviews join request
 
-An authorized class manager SHALL be able to approve or reject a pending join request via `PATCH /classes/{class_id}/join-requests/{id}/review`. The request body MUST include an `action` field with value `"approve"` or `"reject"`. The endpoint MUST require `can_manage_class` authorization.
+Teachers SHALL be able to approve or reject pending join requests for their managed class. The `review_join_request()` service function SHALL accept a `class_id` parameter and SHALL verify that the loaded JoinRequest belongs to the specified class. If `jr.class_id != class_id`, the function SHALL raise a ValueError. When approving, the function SHALL check for an existing ClassMembership before inserting — if a membership already exists for that (class_id, user_id) pair, the insert SHALL be skipped (idempotent approval).
 
-#### Scenario: Teacher approves a join request
+#### Scenario: Teacher approves join request for own class
 
-- **WHEN** an authorized teacher sends a review request with `action = "approve"` for a pending `JoinRequest`
-- **THEN** the system SHALL create a `ClassMembership` with role `student` for the requesting user, update the `JoinRequest` status to `"approved"`, set `reviewed_at` to the current UTC time, and set `reviewed_by` to the reviewing teacher's user ID
+- **WHEN** a teacher who manages class C approves a join request belonging to class C
+- **THEN** the system SHALL mark the request as approved and create a ClassMembership if none exists
 
-#### Scenario: Teacher rejects a join request
+#### Scenario: Teacher attempts to review join request from another class
 
-- **WHEN** an authorized teacher sends a review request with `action = "reject"` for a pending `JoinRequest`
-- **THEN** the system SHALL update the `JoinRequest` status to `"rejected"`, set `reviewed_at` to the current UTC time, and set `reviewed_by` to the reviewing teacher's user ID. No `ClassMembership` SHALL be created.
+- **WHEN** a teacher who manages class A attempts to review a join request belonging to class B
+- **THEN** the system SHALL raise a ValueError indicating the request does not belong to the specified class
 
-#### Scenario: Review of non-pending request
+#### Scenario: Idempotent approval when membership already exists
 
-- **WHEN** a teacher attempts to review a `JoinRequest` that is not in `pending` status
-- **THEN** the system MUST return HTTP 400 with a message indicating only pending requests can be reviewed
-
-#### Scenario: Unauthorized user cannot review
-
-- **WHEN** a user who does not satisfy `can_manage_class` for the class sends a review request
-- **THEN** the system MUST return HTTP 403
-
-#### Scenario: Join request not found
-
-- **WHEN** a teacher sends a review request with a non-existent join request ID
-- **THEN** the system MUST return HTTP 404
+- **WHEN** a teacher approves a join request for a student who already has a ClassMembership in that class
+- **THEN** the system SHALL mark the request as approved but SHALL NOT create a duplicate ClassMembership
 
 
 <!-- @trace
-source: invite-code-join-review
-updated: 2026-03-25
+source: fix-codex-review-findings
+updated: 2026-04-03
 code:
-  - scripts/migrations/20260325_004_join_request_index.py
-  - src/main.py
-  - src/shared/page_context.py
-  - uv.lock
-  - src/pages/router.py
-  - src/templates/teacher/class_members.html
-  - src/core/classes/router.py
-  - src/core/classes/service.py
-  - src/templates/student/dashboard.html
-  - src/core/classes/models.py
-  - src/core/system/router.py
-  - src/core/system/models.py
-  - src/templates/admin/system_settings.html
-tests:
-  - tests/test_join_requests.py
+  - .agents/workflows
+  - .agents/skills/spectra-discuss
+  - .agents/workflows/spectra-ingest.md
+  - .github/skills/spectra-ask/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-002.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-004.md
+  - .github/prompts/spectra-debug.prompt.md
+  - .github/prompts/spectra-propose.prompt.md
+  - .github/skills/spectra-archive/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-005.md
+  - .security-audit/active/dprs-full-review-2026-04-02/scope.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/workflows/spectra-ask.md
+  - .github/skills/spectra-audit/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/.audit.yaml
+  - .agents/workflows/spectra-archive.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-003.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-ingest
+  - .agents/workflows/spectra-apply.md
+  - .github/skills/spectra-apply/SKILL.md
+  - .github/skills/spectra-propose/SKILL.md
+  - AGENTS.md
+  - .agents/workflows/spectra-propose.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .github/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-audit
+  - .security-audit/active/dprs-full-review-2026-04-02/tasks.md
+  - .github/prompts/spectra-archive.prompt.md
+  - .agents/skills/spectra-debug
+  - GEMINI.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-001.md
+  - .agents/skills/spectra-audit/SKILL.md
+  - .github/prompts/spectra-apply.prompt.md
+  - .github/skills/spectra-ingest/SKILL.md
+  - .github/prompts/spectra-ask.prompt.md
+  - .github/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-apply
+  - .agents/skills
+  - .agents/skills/spectra-propose
+  - .github/prompts/spectra-discuss.prompt.md
+  - .github/prompts/spectra-ingest.prompt.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-archive
+  - .agents/skills/spectra-ask
+  - .github/prompts/spectra-audit.prompt.md
+  - .security-audit/active/dprs-full-review-2026-04-02/plan.md
+  - .agents/workflows/spectra-debug.md
+  - .agents/skills/spectra-ingest/SKILL.md
+  - .codex/environments/environment.toml
+  - .agents/workflows/spectra-audit.md
+  - .agents/workflows/spectra-discuss.md
 -->
 
 ---

@@ -5518,111 +5518,77 @@ tests:
 ---
 ### Requirement: FastAPI dependency injection via registry
 
-The system SHALL provide FastAPI `Depends` factory functions that retrieve implementations from the registry. Routers and services SHALL use these factories rather than importing implementations directly.
+The system SHALL provide FastAPI `Depends` factory functions that retrieve implementations from the registry. Routers and services SHALL use these factories rather than importing implementations directly. The `get_reward_providers()` function SHALL return a `list` of implementation objects (not a dict), so that callers can iterate providers directly with `for provider in get_reward_providers()`.
 
 #### Scenario: Router uses injected provider
 
 - **WHEN** a router endpoint declares a dependency on `get_reward_provider()`
 - **THEN** FastAPI SHALL inject the registered RewardProvider for that event type
 
+#### Scenario: Reward providers iterated as list
+
+- **WHEN** a caller iterates `get_reward_providers()`
+- **THEN** each element SHALL be a RewardProvider implementation object, NOT a dict key string
+
 
 <!-- @trace
-source: daily-training-submission-system
-updated: 2026-03-18
+source: fix-codex-review-findings
+updated: 2026-04-03
 code:
-  - src/gamification/__init__.py
-  - src/core/classes/router.py
-  - src/core/classes/service.py
-  - scripts/__init__.py
-  - src/extensions/protocols/reward.py
-  - src/extensions/registry/__init__.py
-  - src/extensions/protocols/__init__.py
-  - src/tasks/checkin/router.py
-  - src/templates/teacher/templates_list.html
-  - LICENSE
-  - uv.lock
-  - src/core/users/__init__.py
-  - src/gamification/points/service.py
-  - src/templates/community/leaderboard.html
-  - src/templates/shared/base.html
-  - src/templates/teacher/template_form.html
-  - src/core/auth/__init__.py
-  - src/tasks/templates/models.py
-  - src/templates/teacher/points_manage.html
-  - src/templates/community/feed.html
-  - src/community/feed/router.py
-  - src/extensions/protocols/validator.py
-  - src/shared/database.py
-  - src/core/classes/__init__.py
-  - src/tasks/checkin/service.py
-  - src/tasks/templates/service.py
-  - src/gamification/badges/__init__.py
-  - src/gamification/points/models.py
-  - src/tasks/checkin/__init__.py
-  - src/community/feed/__init__.py
-  - src/gamification/prizes/__init__.py
-  - src/core/auth/deps.py
-  - src/core/auth/jwt.py
-  - src/extensions/deps.py
-  - docker-compose.yml
-  - src/community/__init__.py
-  - src/core/auth/local_provider.py
-  - src/core/classes/models.py
-  - src/gamification/badges/router.py
-  - src/gamification/leaderboard/router.py
-  - scripts/migrations/__init__.py
-  - src/gamification/points/router.py
-  - src/main.py
-  - src/extensions/registry/core.py
-  - src/shared/__init__.py
-  - src/tasks/checkin/models.py
-  - src/core/users/router.py
-  - pytest.ini
-  - scripts/migrations/20260317_001_initial_indexes.py
-  - src/tasks/submissions/__init__.py
-  - src/community/feed/models.py
-  - src/core/users/models.py
-  - src/gamification/leaderboard/__init__.py
-  - src/templates/student/badges.html
-  - src/tasks/templates/router.py
-  - src/gamification/points/providers.py
-  - src/templates/student/dashboard.html
-  - src/extensions/protocols/badge.py
-  - src/tasks/templates/__init__.py
-  - src/core/auth/password.py
-  - src/extensions/__init__.py
-  - src/gamification/points/__init__.py
-  - pyproject.toml
-  - src/extensions/protocols/auth.py
-  - src/tasks/__init__.py
-  - src/gamification/prizes/models.py
-  - src/tasks/submissions/router.py
-  - src/gamification/badges/service.py
-  - src/tasks/submissions/models.py
-  - src/gamification/prizes/router.py
-  - src/templates/student/submit_task.html
-  - scripts/migrate.py
-  - src/core/__init__.py
-  - src/gamification/badges/models.py
-  - src/core/auth/router.py
-  - src/tasks/submissions/service.py
-  - src/gamification/badges/triggers.py
-tests:
-  - tests/test_checkin.py
-  - tests/test_database.py
-  - tests/test_extensions.py
-  - tests/test_points.py
-  - tests/test_task_templates.py
-  - tests/test_classes.py
-  - tests/test_submissions.py
-  - tests/test_leaderboard.py
-  - tests/test_feed.py
-  - tests/test_prizes.py
-  - tests/test_migration.py
-  - tests/test_module_structure.py
-  - tests/test_auth.py
-  - tests/test_badges.py
-  - scripts/migrations/test_example_migration.py
+  - .agents/workflows
+  - .agents/skills/spectra-discuss
+  - .agents/workflows/spectra-ingest.md
+  - .github/skills/spectra-ask/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-002.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-004.md
+  - .github/prompts/spectra-debug.prompt.md
+  - .github/prompts/spectra-propose.prompt.md
+  - .github/skills/spectra-archive/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-005.md
+  - .security-audit/active/dprs-full-review-2026-04-02/scope.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/workflows/spectra-ask.md
+  - .github/skills/spectra-audit/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/.audit.yaml
+  - .agents/workflows/spectra-archive.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-003.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-ingest
+  - .agents/workflows/spectra-apply.md
+  - .github/skills/spectra-apply/SKILL.md
+  - .github/skills/spectra-propose/SKILL.md
+  - AGENTS.md
+  - .agents/workflows/spectra-propose.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .github/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-audit
+  - .security-audit/active/dprs-full-review-2026-04-02/tasks.md
+  - .github/prompts/spectra-archive.prompt.md
+  - .agents/skills/spectra-debug
+  - GEMINI.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-001.md
+  - .agents/skills/spectra-audit/SKILL.md
+  - .github/prompts/spectra-apply.prompt.md
+  - .github/skills/spectra-ingest/SKILL.md
+  - .github/prompts/spectra-ask.prompt.md
+  - .github/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-apply
+  - .agents/skills
+  - .agents/skills/spectra-propose
+  - .github/prompts/spectra-discuss.prompt.md
+  - .github/prompts/spectra-ingest.prompt.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-archive
+  - .agents/skills/spectra-ask
+  - .github/prompts/spectra-audit.prompt.md
+  - .security-audit/active/dprs-full-review-2026-04-02/plan.md
+  - .agents/workflows/spectra-debug.md
+  - .agents/skills/spectra-ingest/SKILL.md
+  - .codex/environments/environment.toml
+  - .agents/workflows/spectra-audit.md
+  - .agents/workflows/spectra-discuss.md
 -->
 
 ---

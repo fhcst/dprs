@@ -426,7 +426,15 @@ async def submit_task_page(
     points: int | None = None,
     current_user: User = Depends(get_page_user),
 ):
+    from core.classes.models import ClassMembership
     from tasks.templates.service import get_template_for_date
+
+    membership = await ClassMembership.find_one(
+        ClassMembership.class_id == class_id,
+        ClassMembership.user_id == str(current_user.id),
+    )
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="非此班級成員")
 
     today_template = await get_template_for_date(class_id, date.today())
     if today_template is None:

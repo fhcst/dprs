@@ -109,54 +109,77 @@ tests:
 ---
 ### Requirement: Task assignment supports per-task template overrides
 
-The task assignment form SHALL include an advanced options section (collapsed by default) with three fields: title override, description override, and footer override. These fields SHALL be pre-filled with the class default template values. When submitted, non-empty override values SHALL take precedence over the class default for that task's Discord embed.
+The `ScheduleRuleRequest` model SHALL include optional fields `dc_title_override`, `dc_desc_override`, and `dc_footer_override` (all `Optional[str]`). When a schedule rule is created with these fields set, the system SHALL pass the override values to the Discord webhook renderer so that the scheduled Discord message uses the custom title, description, and footer instead of defaults.
 
-#### Scenario: Teacher overrides title at task level
+#### Scenario: Schedule rule created with Discord overrides
 
-- **WHEN** a teacher assigns a task with a non-empty title override value
-- **THEN** the Discord embed title SHALL use the task-level override instead of the class default
+- **WHEN** a teacher creates a schedule rule with `dc_title_override` set to "特別公告"
+- **THEN** the Discord webhook message SHALL use "特別公告" as the title instead of the default template title
 
-#### Scenario: Teacher leaves override empty to use class default
+#### Scenario: Schedule rule created without Discord overrides
 
-- **WHEN** a teacher assigns a task with the title override field left empty and the class has a `discord_template.title_format` set
-- **THEN** the Discord embed title SHALL use the class default `title_format`
-
-#### Scenario: Advanced options are collapsed by default
-
-- **WHEN** a teacher opens the task assignment form
-- **THEN** the advanced options section containing template overrides SHALL be collapsed (hidden) by default
-
-#### Scenario: Override fields are pre-filled from class defaults
-
-- **WHEN** a teacher expands the advanced options section for a class that has `discord_template` set
-- **THEN** the title, description, and footer fields SHALL be pre-filled with the class default values
+- **WHEN** a teacher creates a schedule rule without setting any `dc_*_override` fields
+- **THEN** the Discord webhook message SHALL use the default template values
 
 
 <!-- @trace
-source: dc-template-msg-editor
-updated: 2026-03-25
+source: fix-codex-review-findings
+updated: 2026-04-03
 code:
-  - src/core/system/models.py
-  - src/templates/teacher/template_assign.html
-  - src/templates/teacher/class_hub.html
-  - src/core/classes/service.py
-  - src/integrations/discord/service.py
-  - uv.lock
-  - src/core/classes/models.py
-  - src/pages/router.py
-  - src/templates/teacher/class_members.html
-  - scripts/migrations/20260325_004_join_request_index.py
-  - src/core/system/router.py
-  - src/tasks/templates/router.py
-  - src/shared/page_context.py
-  - src/templates/admin/system_settings.html
-  - src/main.py
-  - src/templates/student/dashboard.html
-  - src/core/classes/router.py
-tests:
-  - tests/test_dc_template.py
-  - tests/test_discord_integration.py
-  - tests/test_join_requests.py
+  - .agents/workflows
+  - .agents/skills/spectra-discuss
+  - .agents/workflows/spectra-ingest.md
+  - .github/skills/spectra-ask/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-002.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-004.md
+  - .github/prompts/spectra-debug.prompt.md
+  - .github/prompts/spectra-propose.prompt.md
+  - .github/skills/spectra-archive/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-005.md
+  - .security-audit/active/dprs-full-review-2026-04-02/scope.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/workflows/spectra-ask.md
+  - .github/skills/spectra-audit/SKILL.md
+  - .security-audit/active/dprs-full-review-2026-04-02/.audit.yaml
+  - .agents/workflows/spectra-archive.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-003.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-ingest
+  - .agents/workflows/spectra-apply.md
+  - .github/skills/spectra-apply/SKILL.md
+  - .github/skills/spectra-propose/SKILL.md
+  - AGENTS.md
+  - .agents/workflows/spectra-propose.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .github/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-audit
+  - .security-audit/active/dprs-full-review-2026-04-02/tasks.md
+  - .github/prompts/spectra-archive.prompt.md
+  - .agents/skills/spectra-debug
+  - GEMINI.md
+  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-001.md
+  - .agents/skills/spectra-audit/SKILL.md
+  - .github/prompts/spectra-apply.prompt.md
+  - .github/skills/spectra-ingest/SKILL.md
+  - .github/prompts/spectra-ask.prompt.md
+  - .github/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-apply
+  - .agents/skills
+  - .agents/skills/spectra-propose
+  - .github/prompts/spectra-discuss.prompt.md
+  - .github/prompts/spectra-ingest.prompt.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .agents/skills/spectra-archive
+  - .agents/skills/spectra-ask
+  - .github/prompts/spectra-audit.prompt.md
+  - .security-audit/active/dprs-full-review-2026-04-02/plan.md
+  - .agents/workflows/spectra-debug.md
+  - .agents/skills/spectra-ingest/SKILL.md
+  - .codex/environments/environment.toml
+  - .agents/workflows/spectra-audit.md
+  - .agents/workflows/spectra-discuss.md
 -->
 
 ---

@@ -544,3 +544,57 @@ async def test_attendance_manage_page_student_forbidden(db_app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", cookies=cookies) as ac:
         response = await ac.get(f"/pages/teacher/classes/{cls.id}/attendance", follow_redirects=False)
     assert response.status_code in (403, 401)
+
+
+# ---------------------------------------------------------------------------
+# Submit task page membership guard (fix-submit-page-membership-check)
+# ---------------------------------------------------------------------------
+
+async def test_submit_task_page_member_can_access(db_app):
+    """Class member can open the student submit page (Class member can open the submit page)."""
+    from core.classes.models import Class, ClassMembership
+
+    app, student, _ = db_app
+
+    cls = Class(
+        name="Member Guard Class",
+        description="",
+        visibility="private",
+        owner_id="owner",
+        invite_code="MBR001",
+    )
+    await cls.insert()
+    await ClassMembership(class_id=str(cls.id), user_id=str(student.id), role="student").insert()
+
+    cookies = _auth_cookie(str(student.id), int(STUDENT))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", cookies=cookies) as ac:
+        response = await ac.get(
+            f"/pages/student/classes/{cls.id}/submit", follow_redirects=False
+        )
+
+    assert response.status_code == 200
+
+
+async def test_submit_task_page_non_member_gets_403(db_app):
+    """Non-member is rejected before class task details are revealed (HTTP 403)."""
+    from core.classes.models import Class
+
+    app, student, _ = db_app
+
+    cls = Class(
+        name="Non Member Guard Class",
+        description="",
+        visibility="private",
+        owner_id="owner",
+        invite_code="NMB001",
+    )
+    await cls.insert()
+    # Intentionally no ClassMembership for student
+
+    cookies = _auth_cookie(str(student.id), int(STUDENT))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", cookies=cookies) as ac:
+        response = await ac.get(
+            f"/pages/student/classes/{cls.id}/submit", follow_redirects=False
+        )
+
+    assert response.status_code == 403
