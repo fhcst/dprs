@@ -223,6 +223,59 @@ async def search_students_for_invite(
     return results
 
 
+async def list_students_for_invite(
+    class_id: str,
+    offset: int = 0,
+    limit: int = 100,
+) -> tuple[list[dict], int]:
+    """
+    Return a paginated list of students not yet in class_id.
+
+    Students are sorted by class_name ASC (empty class_name sorts last as
+    "未分類") then seat_number ASC.
+
+    Returns (students, total) where total is the full count before pagination.
+    """
+    # Get existing member IDs
+    memberships = await ClassMembership.find(
+        ClassMembership.class_id == class_id
+    ).to_list()
+    member_ids = {m.user_id for m in memberships}
+
+    # Find all users with STUDENT identity tag
+    all_students = await User.find(
+        User.identity_tags == IdentityTag.STUDENT
+    ).to_list()
+
+    # Filter out existing members
+    non_members = [u for u in all_students if str(u.id) not in member_ids]
+
+    # Sort by class_name ASC (empty → end) then seat_number ASC
+    def _sort_key(user):
+        cn = user.student_profile.class_name if user.student_profile else ""
+        sn = user.student_profile.seat_number if user.student_profile else 0
+        # Empty class_name sorts after all non-empty ones
+        return (0 if cn else 1, cn, sn)
+
+    non_members.sort(key=_sort_key)
+
+    total = len(non_members)
+    page = non_members[offset : offset + limit]
+
+    students = [
+        {
+            "user_id": str(user.id),
+            "display_name": user.display_name,
+            "name": user.name,
+            "class_name": user.student_profile.class_name if user.student_profile else "",
+            "seat_number": user.student_profile.seat_number if user.student_profile else 0,
+            "tags": user.tags,
+        }
+        for user in page
+    ]
+    return students, total
+
+
 async def batch_invite_students(class_id: str, user_ids: list[str]) -> int:
     """
     Directly add users to a class as students. Silently skips existing members.

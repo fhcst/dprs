@@ -170,3 +170,161 @@ async def test_submission_count_trigger(db, student):
     ctx = TriggerContext(class_id="cls1")
     result = await trigger.evaluate(str(student.id), event, ctx)
     assert result is True
+
+
+# --- manual_award_badge endpoint IDOR tests ---
+
+
+def _token(user_id: str, permissions: int) -> str:
+    from core.auth.jwt import create_access_token
+    return create_access_token(user_id=user_id, permissions=permissions)
+
+
+@pytest.fixture
+async def award_app():
+    """Teacher owns a class with a badge; yields app + entities."""
+    from core.users.models import User
+    from core.classes.models import Class, ClassMembership
+    from core.auth.password import hash_password
+    from core.auth.permissions import TEACHER, STUDENT
+    from gamification.badges.models import BadgeDefinition, BadgeAward
+    from tasks.checkin.models import CheckinConfig, DailyCheckinOverride, CheckinRecord
+    from tasks.submissions.models import TaskSubmission
+
+    client = AsyncMongoMockClient()
+    database = client.get_database("test_badge_award_idor")
+    await init_beanie(
+        database=database,
+        document_models=[
+            User, Class, ClassMembership,
+            CheckinConfig, DailyCheckinOverride, CheckinRecord,
+            TaskSubmission, BadgeDefinition, BadgeAward,
+        ],
+    )
+
+    teacher = User(
+        username="teacher1",
+        hashed_password=hash_password("pw"),
+        display_name="Teacher",
+        permissions=int(TEACHER),
+    )
+    await teacher.insert()
+
+    cls = Class(
+        name="TestClass",
+        visibility="private",
+        owner_id=str(teacher.id),
+        invite_code="TCLS0001",
+    )
+    await cls.insert()
+    await ClassMembership(
+        class_id=str(cls.id), user_id=str(teacher.id), role="teacher",
+    ).insert()
+
+    badge = BadgeDefinition(
+        class_id=str(cls.id),
+        name="Manual Badge",
+        description="Awarded manually",
+        created_by=str(teacher.id),
+    )
+    await badge.insert()
+
+    from fastapi import FastAPI
+    from gamification.badges.router import router as badges_router
+
+    app = FastAPI()
+    app.include_router(badges_router)
+
+    yield app, teacher, cls, badge
+    client.close()
+
+
+async def test_manual_award_badge_to_class_student_succeeds(award_app):
+    """Award badge to a student who IS a member of the class -> 200."""
+    from httpx import AsyncClient, ASGITransport
+    from core.users.models import User
+    from core.classes.models import ClassMembership
+    from core.auth.password import hash_password
+    from core.auth.permissions import TEACHER, STUDENT
+
+    app, teacher, cls, badge = award_app
+
+    stu = User(
+        username="stu_member",
+        hashed_password=hash_password("pw"),
+        display_name="Stu Member",
+        permissions=int(STUDENT),
+    )
+    await stu.insert()
+    await ClassMembership(
+        class_id=str(cls.id), user_id=str(stu.id), role="student",
+    ).insert()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", _token(str(teacher.id), int(TEACHER)))
+        resp = await ac.post(
+            f"/classes/{cls.id}/badges/{badge.id}/award",
+            json={"student_id": str(stu.id)},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["awarded"] is True
+    assert "award_id" in data
+
+
+async def test_manual_award_badge_to_non_member_returns_403(award_app):
+    """Award badge to a student who is NOT a member of the class -> 403."""
+    from httpx import AsyncClient, ASGITransport
+    from core.users.models import User
+    from core.auth.password import hash_password
+    from core.auth.permissions import TEACHER, STUDENT
+
+    app, teacher, cls, badge = award_app
+
+    outsider = User(
+        username="outsider",
+        hashed_password=hash_password("pw"),
+        display_name="Outsider",
+        permissions=int(STUDENT),
+    )
+    await outsider.insert()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", _token(str(teacher.id), int(TEACHER)))
+        resp = await ac.post(
+            f"/classes/{cls.id}/badges/{badge.id}/award",
+            json={"student_id": str(outsider.id)},
+        )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Student is not a member of this class"
+
+
+async def test_manual_award_badge_to_teacher_member_returns_403(award_app):
+    """Award badge to a user who is a member but with role 'teacher' -> 403."""
+    from httpx import AsyncClient, ASGITransport
+    from core.users.models import User
+    from core.classes.models import ClassMembership
+    from core.auth.password import hash_password
+    from core.auth.permissions import TEACHER
+
+    app, teacher, cls, badge = award_app
+
+    other_teacher = User(
+        username="teacher2",
+        hashed_password=hash_password("pw"),
+        display_name="Teacher 2",
+        permissions=int(TEACHER),
+    )
+    await other_teacher.insert()
+    await ClassMembership(
+        class_id=str(cls.id), user_id=str(other_teacher.id), role="teacher",
+    ).insert()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", _token(str(teacher.id), int(TEACHER)))
+        resp = await ac.post(
+            f"/classes/{cls.id}/badges/{badge.id}/award",
+            json={"student_id": str(other_teacher.id)},
+        )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Student is not a member of this class"

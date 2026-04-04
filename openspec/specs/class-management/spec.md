@@ -329,7 +329,12 @@ tests:
 ---
 ### Requirement: Teacher batch-invites students to a class
 
-A user authorized to manage a class SHALL be able to search for students not yet in that class and directly add multiple students in a single operation. The search MUST support filtering by administrative class name (`student_profile.class_name`) or real name (`name`). Invited students SHALL be added immediately as members with role `student` without requiring student confirmation.
+A user authorized to manage a class SHALL be able to browse all students not yet in that class via an enumerate-first interface and directly add multiple students in a single operation. The UI MUST display all available students grouped by category (grade/class or tags) with category select-all and client-side search filtering. The existing search API (`GET /classes/{class_id}/invite/search`) SHALL remain available for backward compatibility. Invited students SHALL be added immediately as members with role `student` without requiring student confirmation.
+
+#### Scenario: Teacher views all available students on page load
+
+- **WHEN** an authorized teacher navigates to the class member management page
+- **THEN** the invite panel SHALL begin loading all non-member students via paginated API and display them grouped by grade and administrative class
 
 #### Scenario: Teacher searches students by administrative class name
 
@@ -351,44 +356,22 @@ A user authorized to manage a class SHALL be able to search for students not yet
 - **WHEN** a user who does not satisfy `can_manage_class` for the given class sends `POST /classes/{class_id}/invite/batch`
 - **THEN** the system MUST return HTTP 403
 
+
 <!-- @trace
-source: permission-identity-refactor
-updated: 2026-03-19
+source: enumerate-first-student-invite
+updated: 2026-04-04
 code:
-  - src/core/classes/router.py
-  - src/core/users/schemas.py
   - src/core/classes/service.py
-  - src/core/users/router.py
-  - src/templates/student/dashboard.html
-  - src/templates/teacher/class_members.html
-  - src/pages/router.py
-  - src/core/auth/router.py
-  - src/tasks/checkin/router.py
-  - src/tasks/templates/router.py
-  - src/core/classes/models.py
-  - src/templates/admin/classes_list.html
-  - scripts/migrations/20260319_003_init_identity_tags.py
-  - src/community/feed/router.py
-  - src/core/users/models.py
-  - src/gamification/leaderboard/router.py
-  - src/templates/admin/layout.html
-  - src/templates/admin/user_form.html
-  - src/templates/admin/users_list.html
+  - SECURITY.md
+  - CLAUDE.md
+  - docs/security-notes.md
+  - src/core/classes/router.py
   - src/templates/shared/base.html
-  - src/templates/teacher/template_assign.html
-  - src/templates/teacher/template_form.html
-  - scripts/migrations/20260319_002_manage_class_rename.py
-  - src/core/auth/permissions.py
+  - src/templates/teacher/class_members.html
 tests:
-  - tests/test_class_permissions.py
-  - tests/test_admin_permissions.py
-  - tests/test_identity_tags.py
-  - tests/test_auth.py
-  - tests/auth/test_user_model.py
-  - tests/test_user_visibility.py
-  - tests/auth/test_guards.py
-  - tests/auth/test_permissions.py
+  - tests/test_invite_enumerate.py
 -->
+
 ---
 ### Requirement: Class list view separates active and archived classes
 

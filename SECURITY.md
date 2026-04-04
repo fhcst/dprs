@@ -145,6 +145,15 @@
 
 ---
 
+## 安全審計備查 Security Audit Notes
+
+開發過程中的安全審計發現與持續監控項目記錄於 [`docs/security-notes.md`](docs/security-notes.md)。
+該文件包含：已確認漏洞的追蹤狀態、已知的設計決策與風險接受理由、需持續監控的潛在風險。
+
+開發者在修改相關模組前，請先查閱該文件。
+
+---
+
 ## 聯絡資訊
 
 若有任何安全相關疑問，請聯繫：**security@example.com**

@@ -10813,110 +10813,39 @@ tests:
 ---
 ### Requirement: Teacher awards badge manually
 
-Teachers SHALL be able to manually award any defined badge to any student in their class, with an optional reason note.
+Teachers SHALL be able to manually award any defined badge to a student in their class, with an optional reason note. The system SHALL verify that the target student is a member of the class with the `"student"` role before awarding the badge. If the target user is not a student member of the class, the system SHALL reject the request with HTTP 403.
 
-#### Scenario: Teacher manually awards badge
+#### Scenario: Teacher manually awards badge to class student
 
-- **WHEN** a teacher selects a student and a badge and submits the manual award
+- **WHEN** a teacher submits a manual badge award with a `student_id` that is a student member of the class
 - **THEN** the system SHALL create a badge award record with manual award source
 
+#### Scenario: Teacher attempts to award badge to non-member
+
+- **WHEN** a teacher submits a manual badge award with a `student_id` that has no ClassMembership in the class
+- **THEN** the system SHALL reject the request with HTTP 403 and detail "Student is not a member of this class"
+
+#### Scenario: Teacher attempts to award badge to non-student member
+
+- **WHEN** a teacher submits a manual badge award with a `student_id` that is a member of the class but with role `"teacher"` (not `"student"`)
+- **THEN** the system SHALL reject the request with HTTP 403 and detail "Student is not a member of this class"
+
+
 <!-- @trace
-source: daily-training-submission-system
-updated: 2026-03-18
+source: fix-badge-award-idor
+updated: 2026-04-04
 code:
-  - src/gamification/__init__.py
+  - CLAUDE.md
   - src/core/classes/router.py
-  - src/core/classes/service.py
-  - scripts/__init__.py
-  - src/extensions/protocols/reward.py
-  - src/extensions/registry/__init__.py
-  - src/extensions/protocols/__init__.py
-  - src/tasks/checkin/router.py
-  - src/templates/teacher/templates_list.html
-  - LICENSE
-  - uv.lock
-  - src/core/users/__init__.py
-  - src/gamification/points/service.py
-  - src/templates/community/leaderboard.html
+  - src/templates/teacher/class_members.html
+  - SECURITY.md
+  - docs/security-notes.md
   - src/templates/shared/base.html
-  - src/templates/teacher/template_form.html
-  - src/core/auth/__init__.py
-  - src/tasks/templates/models.py
-  - src/templates/teacher/points_manage.html
-  - src/templates/community/feed.html
-  - src/community/feed/router.py
-  - src/extensions/protocols/validator.py
-  - src/shared/database.py
-  - src/core/classes/__init__.py
-  - src/tasks/checkin/service.py
-  - src/tasks/templates/service.py
-  - src/gamification/badges/__init__.py
-  - src/gamification/points/models.py
-  - src/tasks/checkin/__init__.py
-  - src/community/feed/__init__.py
-  - src/gamification/prizes/__init__.py
-  - src/core/auth/deps.py
-  - src/core/auth/jwt.py
-  - src/extensions/deps.py
-  - docker-compose.yml
-  - src/community/__init__.py
-  - src/core/auth/local_provider.py
-  - src/core/classes/models.py
+  - src/core/classes/service.py
   - src/gamification/badges/router.py
-  - src/gamification/leaderboard/router.py
-  - scripts/migrations/__init__.py
-  - src/gamification/points/router.py
-  - src/main.py
-  - src/extensions/registry/core.py
-  - src/shared/__init__.py
-  - src/tasks/checkin/models.py
-  - src/core/users/router.py
-  - pytest.ini
-  - scripts/migrations/20260317_001_initial_indexes.py
-  - src/tasks/submissions/__init__.py
-  - src/community/feed/models.py
-  - src/core/users/models.py
-  - src/gamification/leaderboard/__init__.py
-  - src/templates/student/badges.html
-  - src/tasks/templates/router.py
-  - src/gamification/points/providers.py
-  - src/templates/student/dashboard.html
-  - src/extensions/protocols/badge.py
-  - src/tasks/templates/__init__.py
-  - src/core/auth/password.py
-  - src/extensions/__init__.py
-  - src/gamification/points/__init__.py
-  - pyproject.toml
-  - src/extensions/protocols/auth.py
-  - src/tasks/__init__.py
-  - src/gamification/prizes/models.py
-  - src/tasks/submissions/router.py
-  - src/gamification/badges/service.py
-  - src/tasks/submissions/models.py
-  - src/gamification/prizes/router.py
-  - src/templates/student/submit_task.html
-  - scripts/migrate.py
-  - src/core/__init__.py
-  - src/gamification/badges/models.py
-  - src/core/auth/router.py
-  - src/tasks/submissions/service.py
-  - src/gamification/badges/triggers.py
 tests:
-  - tests/test_checkin.py
-  - tests/test_database.py
-  - tests/test_extensions.py
-  - tests/test_points.py
-  - tests/test_task_templates.py
-  - tests/test_classes.py
-  - tests/test_submissions.py
-  - tests/test_leaderboard.py
-  - tests/test_feed.py
-  - tests/test_prizes.py
-  - tests/test_migration.py
-  - tests/test_module_structure.py
-  - tests/test_auth.py
+  - tests/test_invite_enumerate.py
   - tests/test_badges.py
-  - scripts/migrations/test_example_migration.py
 -->
 
 ---
@@ -10979,4 +10908,41 @@ The system SHALL verify that the requesting user can manage the class before all
 <!-- @trace
 source: fix-cross-class-access-control
 updated: 2026-03-24
+-->
+
+---
+### Requirement: Teacher sidebar includes badge management link
+
+The teacher sidebar in `base.html` SHALL include a "徽章管理" navigation link within the active class tool links section. The link SHALL point to the `badges_manage_page` route for the active class. The link SHALL only be visible when `active_class.id` is set (same condition as the other class tool links). The link SHALL use an icon consistent with the badge concept (e.g., a star or trophy icon using Heroicons outline style).
+
+#### Scenario: Teacher sees badge management link in sidebar
+
+- **WHEN** a teacher views any page with the sidebar and has an active class selected
+- **THEN** the sidebar SHALL display a "徽章管理" link under the active class tool links section
+
+#### Scenario: Badge management link navigates to correct page
+
+- **WHEN** a teacher clicks the "徽章管理" link in the sidebar
+- **THEN** the browser SHALL navigate to `/pages/classes/{active_class_id}/badges` (the `badges_manage_page` route)
+
+#### Scenario: Badge management link hidden when no active class
+
+- **WHEN** a teacher views a page without an active class selected
+- **THEN** the sidebar SHALL NOT display the "徽章管理" link
+
+<!-- @trace
+source: add-badge-sidebar-link
+updated: 2026-04-04
+code:
+  - src/templates/teacher/class_members.html
+  - CLAUDE.md
+  - src/gamification/badges/router.py
+  - src/core/classes/service.py
+  - src/templates/shared/base.html
+  - SECURITY.md
+  - docs/security-notes.md
+  - src/core/classes/router.py
+tests:
+  - tests/test_invite_enumerate.py
+  - tests/test_badges.py
 -->

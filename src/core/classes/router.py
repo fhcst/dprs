@@ -1,5 +1,5 @@
 """Classes router."""
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from core.auth.deps import get_current_user
@@ -19,6 +19,7 @@ from core.classes.service import (
     promote_to_teacher,
     regenerate_invite_code,
     remove_member,
+    list_students_for_invite,
     review_join_request,
     search_students_for_invite,
     set_visibility,
@@ -195,6 +196,24 @@ async def batch_invite(
     await _require_manage(class_id, user)
     added = await batch_invite_students(class_id, body.user_ids)
     return {"added": added}
+
+
+@router.get("/{class_id}/invite/students")
+async def list_invite_students(
+    class_id: str,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1),
+    user: User = Depends(get_current_user),
+):
+    """List students available for invite with pagination."""
+    await _require_manage(class_id, user)
+    students, total = await list_students_for_invite(class_id, offset=offset, limit=limit)
+    return {
+        "students": students,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.get("/{class_id}/join-requests")

@@ -157,6 +157,17 @@ async def manual_award_badge(
     if badge is None or badge.class_id != class_id:
         raise HTTPException(status_code=404, detail="Badge not found")
 
+    membership = await ClassMembership.find_one(
+        ClassMembership.class_id == class_id,
+        ClassMembership.user_id == body.student_id,
+        ClassMembership.role == "student",
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student is not a member of this class",
+        )
+
     award = await award_badge(
         badge_id=badge_id,
         student_id=body.student_id,
