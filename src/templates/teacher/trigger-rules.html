@@ -498,7 +498,7 @@ document.getElementById('help-btn').addEventListener('click', async () => {
       }
       htmlContent += `</div>`;
 
-      Modal.alert(htmlContent);
+      Modal.alertHtml(htmlContent);
       return;
     } catch (e) {
       console.warn('Failed to get WASM help content, using fallback:', e);
@@ -568,7 +568,7 @@ document.getElementById('help-btn').addEventListener('click', async () => {
   }
   htmlContent += `</div>`;
 
-  Modal.alert(htmlContent);
+  Modal.alertHtml(htmlContent);
 });
 </script>
 {% endblock %}

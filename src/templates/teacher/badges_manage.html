@@ -2,23 +2,31 @@
 {% block title %}徽章管理 — {{ class_name }}{% endblock %}
 
 {% block head_extra %}
+{# ── CodeMirror 6 (ESM from CDN via importmap) ── #}
+<script type="importmap">
+{
+  "imports": {
+    "codemirror": "https://esm.sh/codemirror@6.0.1",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.36.8",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.5.2",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.11.0",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.8.1",
+    "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.18.6",
+    "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.8.5",
+    "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1",
+    "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.3.2",
+    "@lezer/markdown": "https://esm.sh/@lezer/markdown@1.4.3"
+  }
+}
+</script>
 <style>
-  /* Milkdown editor chrome */
-  .milkdown-wrap { min-height: 120px; }
-  .milkdown-wrap .milkdown { outline: none; }
-  .milkdown-wrap .milkdown .editor { min-height: 100px; padding: 12px 16px; }
-  .milkdown-wrap .milkdown p { margin: 0.35em 0; }
-  .milkdown-wrap .milkdown h1,
-  .milkdown-wrap .milkdown h2,
-  .milkdown-wrap .milkdown h3 { font-weight: 700; margin: 0.5em 0 0.25em; }
-  .milkdown-wrap .milkdown ul,
-  .milkdown-wrap .milkdown ol { padding-left: 1.5em; margin: 0.35em 0; }
-  .milkdown-wrap .milkdown blockquote { border-left: 3px solid #8b5cf6; padding-left: 12px; color: #6b7280; }
-  .milkdown-wrap .milkdown code { background: rgba(139,92,246,0.08); padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
-  .milkdown-wrap .milkdown pre { background: rgba(0,0,0,0.04); padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
-  .dark .milkdown-wrap .milkdown pre { background: rgba(255,255,255,0.05); }
-  .dark .milkdown-wrap .milkdown blockquote { border-left-color: #a78bfa; color: #9ca3af; }
-  .dark .milkdown-wrap .milkdown code { background: rgba(139,92,246,0.15); }
+  /* CodeMirror editor chrome */
+  .cm-editor { height: auto; min-height: 120px; font-size: 14px; border-radius: 0 0 8px 8px; }
+  .cm-editor .cm-content { padding: 12px 16px; }
+  .cm-editor.cm-focused { outline: 2px solid rgb(139 92 246); outline-offset: -1px; }
+  /* gutter 配色跟隨容器背景 */
+  .cm-editor .cm-gutters { background: transparent; border-right: 1px solid #e5e7eb; color: #9ca3af; }
+  .dark .cm-editor .cm-gutters { border-right-color: #374151; color: #6b7280; }
 
   /* G2 dual-zone separator */
   .g2-auto-zone {
@@ -40,7 +48,13 @@
 
 {# ── Create / Edit Badge Form ─────────────────────────────────────────────── #}
 <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
-  <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200 mb-4" id="form-title">新增徽章</h2>
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200" id="form-title">新增徽章</h2>
+    <button type="button" id="badge-help-btn" title="徽章設定說明" aria-label="開啟徽章設定說明"
+            class="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150 cursor-pointer text-sm font-medium">
+      ?
+    </button>
+  </div>
 
   <form id="badge-form">
     <input type="hidden" id="badge-id" value="">
@@ -125,8 +139,8 @@
         {# ── G2 Separator (visible only when auto-zone is shown) ── #}
         <div id="g2-separator" class="hidden border-t border-brand-200 dark:border-brand-800"></div>
 
-        {# ── G2 Lower Zone: Milkdown WYSIWYG editor ── #}
-        <div id="milkdown-editor" class="milkdown-wrap bg-white dark:bg-gray-800"></div>
+        {# ── G2 Lower Zone: CodeMirror Markdown editor ── #}
+        <div id="milkdown-editor" class="bg-white dark:bg-gray-800"></div>
       </div>
       <input type="hidden" id="badge-description" value="">
       <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">支援 Markdown 格式：粗體、列表、引用等</p>
@@ -157,7 +171,9 @@
     {% for b in badges %}
     <div class="px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
          data-badge-id="{{ b.id }}">
-      <div class="flex items-center gap-3 min-w-0 flex-1">
+      {# ── Left: clickable info area ── #}
+      <div class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+           onclick="openBadgeDetail('{{ b.id }}')">
         <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900 dark:to-brand-800 flex items-center justify-center text-xl shrink-0 ring-2 ring-brand-100 dark:ring-brand-900">
           {{ b.icon }}
         </div>
@@ -171,7 +187,7 @@
             {% else %}
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">手動</span>
             {% endif %}
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">{{ b.award_count }} 人獲得</span>
+            <span class="award-count-badge inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">{{ b.award_count }} 人獲得</span>
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ b.description[:80] }}{% if b.description|length > 80 %}…{% endif %}</p>
         </div>
@@ -205,15 +221,41 @@
   </div>
   {% endif %}
 </div>
+
+{# ── Badge Detail Modal ───────────────────────────────────────────────────── #}
+<div id="badge-detail-overlay"
+     class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+     onclick="closeBadgeDetailOnOverlay(event)">
+  <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-xl max-h-[80vh] flex flex-col">
+    {# Header #}
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+      <div id="detail-header" class="flex items-center gap-3 min-w-0">
+        <span id="detail-icon" class="text-2xl"></span>
+        <div class="min-w-0">
+          <h2 id="detail-name" class="font-heading font-bold text-base text-gray-900 dark:text-gray-100 truncate"></h2>
+          <span id="detail-type-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5"></span>
+        </div>
+      </div>
+      <button type="button" onclick="closeBadgeDetail()"
+              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer shrink-0 ml-3">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    {# Body — scrollable #}
+    <div id="detail-body" class="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+      <p class="text-sm text-gray-400 dark:text-gray-500">載入中…</p>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script type="module">
-// ── Milkdown WYSIWYG Editor (ESM CDN) ──────────────────────────────────────
-import { Editor, rootCtx, defaultValueCtx } from 'https://esm.sh/@milkdown/core@7.5.0';
-import { commonmark } from 'https://esm.sh/@milkdown/preset-commonmark@7.5.0';
-import { nord } from 'https://esm.sh/@milkdown/theme-nord@7.5.0';
-import { replaceAll, getMarkdown } from 'https://esm.sh/@milkdown/utils@7.5.0';
+// ── CodeMirror 6 Markdown Editor ────────────────────────────────────────────
+import { EditorView, basicSetup } from 'codemirror';
+import { markdown } from '@codemirror/lang-markdown';
 
 // ── DSL WASM module (lazy-loaded for describe()) ────────────────────────────
 let dsl = null;
@@ -234,43 +276,37 @@ loadWasm();
 const CLASS_ID = "{{ class_id }}";
 const API_BASE = `/classes/${CLASS_ID}/badges`;
 
-// ── Milkdown init ───────────────────────────────────────────────────────────
-let editorInstance = null;
+// ── CodeMirror init ──────────────────────────────────────────────────────────
+let view = null;
 
-async function initMilkdown(initialValue = '') {
+function initCodeMirror(initialValue = '') {
   const mount = document.getElementById('milkdown-editor');
-  mount.innerHTML = '';
-
-  editorInstance = await Editor.make()
-    .use(commonmark)
-    .config(nord)
-    .config((ctx) => {
-      ctx.set(rootCtx, mount);
-      ctx.set(defaultValueCtx, initialValue);
-    })
-    .create();
+  if (view) {
+    view.destroy();
+  }
+  view = new EditorView({
+    doc: initialValue,
+    extensions: [basicSetup, markdown()],
+    parent: mount,
+  });
 }
 
 function getEditorMarkdown() {
-  if (!editorInstance) return '';
-  try {
-    return editorInstance.action(getMarkdown());
-  } catch {
-    return '';
-  }
+  if (!view) return '';
+  return view.state.doc.toString();
 }
 
 function setEditorMarkdown(md) {
-  if (!editorInstance) return;
-  try {
-    editorInstance.action(replaceAll(md));
-  } catch {
-    // Fallback: re-init
-    initMilkdown(md);
+  if (!view) {
+    initCodeMirror(md);
+    return;
   }
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: md },
+  });
 }
 
-await initMilkdown('');
+initCodeMirror('');
 
 // ── Trigger source radio switching ──────────────────────────────────────────
 const triggerRadios = document.querySelectorAll('input[name="trigger_source"]');
@@ -435,5 +471,243 @@ window.deleteBadge = function(id, name) {
     }
   });
 };
+
+// ── Badge Detail Modal ────────────────────────────────────────────────────────
+
+let detailCurrentBadgeId = null;
+
+window.openBadgeDetail = async function(badgeId) {
+  detailCurrentBadgeId = badgeId;
+  document.getElementById('badge-detail-overlay').classList.remove('hidden');
+  document.getElementById('detail-body').innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500">載入中…</p>';
+  await refreshBadgeDetail();
+};
+
+window.closeBadgeDetail = function() {
+  document.getElementById('badge-detail-overlay').classList.add('hidden');
+  detailCurrentBadgeId = null;
+};
+
+window.closeBadgeDetailOnOverlay = function(e) {
+  if (e.target === document.getElementById('badge-detail-overlay')) {
+    closeBadgeDetail();
+  }
+};
+
+async function refreshBadgeDetail() {
+  if (!detailCurrentBadgeId) return;
+  try {
+    const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/detail`);
+    if (!res.ok) { Modal.alert('載入失敗，請重試'); return; }
+    const data = await res.json();
+    renderDetailModal(data);
+  } catch {
+    Modal.alert('網路錯誤');
+  }
+}
+
+function renderDetailModal(data) {
+  const { badge, is_manual, awarded, not_awarded } = data;
+
+  // Update header
+  document.getElementById('detail-icon').textContent = badge.icon;
+  document.getElementById('detail-name').textContent = badge.name;
+
+  const typeBadge = document.getElementById('detail-type-badge');
+  if (badge.trigger_key) {
+    typeBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400';
+    typeBadge.textContent = `觸發器：${badge.trigger_key}`;
+  } else if (badge.trigger_rule_id) {
+    typeBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400';
+    typeBadge.textContent = 'DSL 規則';
+  } else {
+    typeBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+    typeBadge.textContent = '手動';
+  }
+
+  // Build body HTML
+  let html = '';
+
+  // Awarded section
+  html += `<div>
+    <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">已獲得（${awarded.length} 人）</h3>`;
+  if (awarded.length === 0) {
+    html += `<p class="text-sm text-gray-400 dark:text-gray-500 py-2">尚無人獲得此徽章</p>`;
+  } else {
+    html += `<ul class="divide-y divide-gray-100 dark:divide-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">`;
+    for (const a of awarded) {
+      const date = new Date(a.awarded_at).toLocaleDateString('zh-TW');
+      html += `<li class="flex items-center justify-between px-3 py-2.5 gap-3">
+        <div class="min-w-0">
+          <span class="text-sm font-medium text-gray-800 dark:text-gray-200">${escHtml(a.student_name)}</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500 ml-2">${date}</span>
+        </div>
+        <button type="button"
+                onclick="revokeFromDetail('${escAttr(a.award_id)}')"
+                class="shrink-0 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 cursor-pointer transition-colors">
+          收回
+        </button>
+      </li>`;
+    }
+    html += `</ul>`;
+  }
+  html += `</div>`;
+
+  // Not-awarded section (always shown; award button only for manual)
+  html += `<div>
+    <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">未獲得（${not_awarded.length} 人）</h3>`;
+  if (not_awarded.length === 0) {
+    html += `<p class="text-sm text-gray-400 dark:text-gray-500 py-2">所有學生均已獲得此徽章</p>`;
+  } else {
+    html += `<ul class="divide-y divide-gray-100 dark:divide-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">`;
+    for (const s of not_awarded) {
+      html += `<li class="flex items-center justify-between px-3 py-2.5 gap-3">
+        <span class="text-sm text-gray-700 dark:text-gray-300">${escHtml(s.student_name)}</span>`;
+      if (is_manual) {
+        html += `<button type="button"
+                  onclick="awardFromDetail('${escAttr(s.student_id)}')"
+                  class="shrink-0 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 cursor-pointer transition-colors">
+          頒發
+        </button>`;
+      }
+      html += `</li>`;
+    }
+    html += `</ul>`;
+  }
+  html += `</div>`;
+
+  document.getElementById('detail-body').innerHTML = html;
+
+  // Sync card award count badge (task 4.4)
+  const card = document.querySelector(`[data-badge-id="${badge.id}"]`);
+  if (card) {
+    const countEl = card.querySelector('.award-count-badge');
+    if (countEl) countEl.textContent = `${awarded.length} 人獲得`;
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+  return String(str).replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
+
+window.awardFromDetail = async function(studentId) {
+  if (!detailCurrentBadgeId) return;
+  try {
+    const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/award`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: studentId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      Modal.alert(err.detail || '頒發失敗');
+      return;
+    }
+    await refreshBadgeDetail();
+  } catch {
+    Modal.alert('網路錯誤');
+  }
+};
+
+window.revokeFromDetail = async function(awardId) {
+  if (!detailCurrentBadgeId) return;
+  try {
+    const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ award_id: awardId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      Modal.alert(err.detail || '收回失敗');
+      return;
+    }
+    await refreshBadgeDetail();
+  } catch {
+    Modal.alert('網路錯誤');
+  }
+};
+
+// ── Badge Help Modal ─────────────────────────────────────────────────────────
+document.getElementById('badge-help-btn').addEventListener('click', () => {
+  let html = '';
+
+  // 觸發來源說明
+  html += `<h3 class="font-semibold text-base mb-3">觸發來源</h3>`;
+  html += `<div class="space-y-3 mb-5">`;
+  const sources = [
+    {
+      label: '手動頒發',
+      desc: '老師從「已建立的徽章」列表，手動選擇學生進行頒發。不設定任何觸發條件。',
+    },
+    {
+      label: '內建觸發器（trigger_key）',
+      desc: '系統在特定事件發生後自動評估條件並頒發徽章。鍵值格式如下：',
+    },
+    {
+      label: 'DSL 觸發規則（trigger_rule_id）',
+      desc: '選擇已建立的 DSL 規則作為觸發條件，支援複合邏輯（AND、OR、函數呼叫等）。前往「觸發規則管理」頁面建立規則。',
+    },
+  ];
+  for (const s of sources) {
+    html += `<div class="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3">`;
+    html += `<p class="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">${s.label}</p>`;
+    html += `<p class="text-sm text-gray-600 dark:text-gray-400">${s.desc}</p>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+
+  // 內建 trigger_key 格式說明
+  html += `<h3 class="font-semibold text-base mb-2">內建觸發器鍵值格式</h3>`;
+  html += `<div class="overflow-x-auto mb-5"><table class="w-full text-sm border-collapse">`;
+  html += `<thead><tr class="text-left border-b border-gray-200 dark:border-gray-700"><th class="pb-2 pr-4 font-medium">鍵值範例</th><th class="pb-2 font-medium">說明</th></tr></thead><tbody>`;
+  const keys = [
+    { key: 'checkin_streak_3', desc: '連續打卡滿 3 天（可替換數字）' },
+    { key: 'checkin_streak_7', desc: '連續打卡滿 7 天' },
+    { key: 'checkin_streak_30', desc: '連續打卡滿 30 天' },
+    { key: 'submit_5', desc: '累積繳交滿 5 次（可替換數字）' },
+    { key: 'submit_10', desc: '累積繳交滿 10 次' },
+  ];
+  for (const k of keys) {
+    html += `<tr class="border-b border-gray-100 dark:border-gray-800">`;
+    html += `<td class="py-1.5 pr-4"><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${k.key}</code></td>`;
+    html += `<td class="py-1.5 text-gray-600 dark:text-gray-400">${k.desc}</td>`;
+    html += `</tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // Markdown 語法說明
+  html += `<h3 class="font-semibold text-base mb-2">徽章說明 Markdown 語法</h3>`;
+  html += `<div class="overflow-x-auto mb-2"><table class="w-full text-sm border-collapse">`;
+  html += `<thead><tr class="text-left border-b border-gray-200 dark:border-gray-700"><th class="pb-2 pr-4 font-medium">語法</th><th class="pb-2 font-medium">效果</th></tr></thead><tbody>`;
+  const mdSyntax = [
+    { syntax: '**文字**', effect: '粗體' },
+    { syntax: '*文字*', effect: '斜體' },
+    { syntax: '- 項目', effect: '無序列表' },
+    { syntax: '1. 項目', effect: '有序列表' },
+    { syntax: '> 文字', effect: '引用區塊' },
+    { syntax: '`程式碼`', effect: '行內程式碼' },
+  ];
+  for (const m of mdSyntax) {
+    html += `<tr class="border-b border-gray-100 dark:border-gray-800">`;
+    html += `<td class="py-1.5 pr-4"><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${m.syntax}</code></td>`;
+    html += `<td class="py-1.5 text-gray-600 dark:text-gray-400">${m.effect}</td>`;
+    html += `</tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // 範例
+  html += `<h3 class="font-semibold text-base mt-4 mb-2">說明範例</h3>`;
+  html += `<pre class="text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-3 overflow-x-auto"><code>連續打卡 **7 天**的同學將獲得此徽章！
+
+達成條件：
+- 不間斷連續打卡 7 天
+- 適用所有班級作業</code></pre>`;
+
+  Modal.alertHtml(html);
+});
 </script>
 {% endblock %}

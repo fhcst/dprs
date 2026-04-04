@@ -8,6 +8,11 @@ from gamification.badges.models import BadgeAward, BadgeDefinition
 logger = logging.getLogger("uvicorn.error")
 
 
+def active_awards_query(*filters):
+    """Return a BadgeAward query with revoked_at == None pre-applied."""
+    return BadgeAward.find(*filters, BadgeAward.revoked_at == None)  # noqa: E711
+
+
 async def award_badge(
     badge_id: str,
     student_id: str,
@@ -15,13 +20,13 @@ async def award_badge(
     awarded_by: str = "system",
     reason: str | None = None,
 ) -> BadgeAward | None:
-    """Award a badge to a student. Returns None if already held."""
-    existing = await BadgeAward.find_one(
+    """Award a badge to a student. Returns None if already holds an active award."""
+    existing = await active_awards_query(
         BadgeAward.badge_id == badge_id,
         BadgeAward.student_id == student_id,
-    )
+    ).first_or_none()
     if existing:
-        return None  # Badge not awarded if already held
+        return None  # Badge not awarded if already held (active)
 
     award = BadgeAward(
         badge_id=badge_id,
@@ -34,9 +39,27 @@ async def award_badge(
     return award
 
 
+async def revoke_badge(
+    award_id: str,
+    badge_id: str,
+    class_id: str,
+    revoked_by: str,
+) -> BadgeAward | None:
+    """Soft-delete a badge award. Returns the updated award, or None if not found/already revoked."""
+    award = await BadgeAward.get(award_id)
+    if award is None or award.badge_id != badge_id or award.class_id != class_id:
+        return None
+    if award.revoked_at is not None:
+        return None  # Already revoked
+    award.revoked_at = datetime.now(timezone.utc)
+    award.revoked_by = revoked_by
+    await award.save()
+    return award
+
+
 async def get_student_badges(student_id: str) -> list[dict]:
-    """Return badges earned by a student with definition details."""
-    awards = await BadgeAward.find(
+    """Return active badges earned by a student with definition details."""
+    awards = await active_awards_query(
         BadgeAward.student_id == student_id,
     ).sort(-BadgeAward.awarded_at).to_list()
 
@@ -160,7 +183,7 @@ async def build_eval_context(
     ).to_list()
     points = sum(t.amount for t in txns)
 
-    badge_count = await BadgeAward.find(
+    badge_count = await active_awards_query(
         BadgeAward.student_id == student_id,
         BadgeAward.class_id == class_id,
     ).count()

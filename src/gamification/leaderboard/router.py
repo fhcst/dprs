@@ -107,8 +107,9 @@ async def leaderboard_page(
     entries = await _build_class_leaderboard(class_id) if visible else []
 
     from gamification.badges.models import BadgeAward
+    from gamification.badges.service import active_awards_query
     for entry in entries:
-        count = await BadgeAward.find(BadgeAward.student_id == entry["student_id"]).count()
+        count = await active_awards_query(BadgeAward.student_id == entry["student_id"]).count()
         entry["badge_count"] = count
 
     page_ctx = await build_page_context(user)

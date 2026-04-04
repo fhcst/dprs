@@ -3,7 +3,7 @@
 本文件記錄安全審計中發現的已知問題、設計決策、與需持續注意的潛在風險。
 供開發時備查，避免引入或加劇已知風險。
 
-**最後更新**：2026-04-04
+**最後更新**：2026-04-04（新增 badge detail / revoke 端點安全設計）
 
 ---
 
@@ -71,6 +71,37 @@
 
 ---
 
+## Badge Detail 與 Revoke 端點安全設計（2026-04-04 新增）
+
+### GET /classes/{class_id}/badges/{badge_id}/detail
+
+- **端點**：`src/gamification/badges/router.py` — `badge_detail`
+- **IDOR 防護**：三重驗證
+  1. `can_manage_class(teacher, cls)` — 教師必須管理此班級
+  2. `badge.class_id == class_id` — 徽章必須屬於此班級
+  3. 學生清單來自 `ClassMembership(class_id, role="student")`，不接受外部 student_id 參數
+- **只回傳 active awards**：使用 `active_awards_query`，已撤銷 award (`revoked_at != None`) 不出現在 awarded 清單
+- **權限**：`require_permission(MANAGE_TASKS)`
+
+### POST /classes/{class_id}/badges/{badge_id}/revoke
+
+- **端點**：`src/gamification/badges/router.py` — `revoke_badge_award`
+- **IDOR 防護**：四重驗證
+  1. `can_manage_class(teacher, cls)` — 教師必須管理此班級
+  2. `badge.class_id == class_id` — 徽章必須屬於此班級
+  3. `award.badge_id == badge_id` + `award.class_id == class_id` — award 必須屬於此徽章和班級（防止跨班或跨徽章操作）
+  4. `award.revoked_at is None` — 防止重複撤銷（回傳 HTTP 409）
+- **Soft delete**：設定 `revoked_at` + `revoked_by`，保留審計軌跡
+- **權限**：`require_permission(MANAGE_TASKS)`
+
+### 前端 XSS 防護（detail modal）
+
+- `renderDetailModal` 中的所有使用者輸入（`student_name`, `award_id`, `student_id`）均透過 `escHtml()` 和 `escAttr()` 轉義後再插入 DOM
+- 不使用 `innerHTML` 直接插入未轉義內容
+- `onclick` 中的動態值透過 `escAttr()` 轉義，防止屬性注入
+
+---
+
 ## 已通過的檢查項目
 
 以下項目在審計中確認為安全：
@@ -81,7 +112,10 @@
 | Badge 管理頁面授權 | ✅ 安全 | `badges_manage_page` 有 `can_manage_class` 檢查 |
 | API 認證 | ✅ 安全 | 使用 `require_permission(MANAGE_TASKS)` |
 | Trigger 互斥驗證 | ✅ 安全 | `model_validator` 防止同時設定 `trigger_key` 和 `trigger_rule_id` |
-| 已頒發 badge 刪除保護 | ✅ 安全 | `award_count > 0` 時禁止刪除 |
+| 已頒發 badge 刪除保護 | ✅ 安全 | `award_count > 0` 時禁止刪除（使用 `active_awards_query` 排除已撤銷） |
 | Template injection | ✅ 安全 | Jinja2 auto-escape 開啟 |
 | `tojson` filter | ✅ 安全 | Jinja2 `tojson` 正確 escape HTML entities |
-| 重複頒發防護 | ✅ 安全 | `award_badge()` 檢查 existing award |
+| 重複頒發防護 | ✅ 安全 | `award_badge()` 只查 active award 防重複 |
+| Detail API IDOR | ✅ 安全 | 三重驗證（see above） |
+| Revoke API IDOR | ✅ 安全 | 四重驗證（see above） |
+| Detail modal XSS | ✅ 安全 | `escHtml` + `escAttr` 轉義所有動態內容 |

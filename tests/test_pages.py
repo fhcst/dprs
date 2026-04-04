@@ -598,3 +598,99 @@ async def test_submit_task_page_non_member_gets_403(db_app):
         )
 
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# badges_manage page — importmap spec (replace-milkdown-with-codemirror)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+async def db_app_badges_manage():
+    """App + teacher + class for testing the teacher badge management page."""
+    from core.classes.models import Class, ClassMembership
+    from core.users.models import User
+    from gamification.badges.models import BadgeAward, BadgeDefinition
+    from gamification.triggers.models import TriggerRule
+    from gamification.points.models import ClassPointConfig, PointTransaction
+    from tasks.checkin.models import CheckinConfig, CheckinRecord, DailyCheckinOverride, AttendanceCorrection
+    from tasks.templates.models import TaskAssignment, TaskTemplate, TaskScheduleRule
+    from tasks.submissions.models import TaskSubmission
+    from community.feed.models import FeedPost
+
+    client = AsyncMongoMockClient()
+    db = client.get_database("test_badges_manage")
+    await init_beanie(
+        database=db,
+        document_models=[
+            User, Class, ClassMembership,
+            TaskTemplate, TaskAssignment, TaskScheduleRule, TaskSubmission,
+            CheckinConfig, DailyCheckinOverride, CheckinRecord, AttendanceCorrection,
+            PointTransaction, ClassPointConfig,
+            BadgeDefinition, BadgeAward,
+            TriggerRule,
+            FeedPost,
+        ],
+    )
+
+    teacher = User(
+        username="mgr_teacher",
+        hashed_password="x",
+        display_name="MgrTeacher",
+        permissions=int(TEACHER),
+    )
+    await teacher.insert()
+
+    cls = Class(
+        name="Badge Mgmt Class",
+        description="",
+        visibility="private",
+        owner_id=str(teacher.id),
+        invite_code="BMGR01",
+    )
+    await cls.insert()
+    await ClassMembership(
+        class_id=str(cls.id),
+        user_id=str(teacher.id),
+        role="teacher",
+    ).insert()
+
+    from core.auth.router import router as auth_router
+    from gamification.badges.router import router as badges_router
+    from gamification.leaderboard.router import router as leaderboard_router
+    from gamification.points.router import router as points_router
+    from gamification.triggers.router import router as triggers_router
+    from pages.router import router as pages_router
+    from tasks.checkin.router import router as checkin_router
+    from tasks.submissions.router import router as submissions_router
+    from tasks.templates.router import router as templates_router
+
+    app = FastAPI()
+    for r in [auth_router, pages_router, submissions_router,
+              badges_router, leaderboard_router, points_router,
+              checkin_router, templates_router, triggers_router]:
+        app.include_router(r)
+    yield app, teacher, cls
+    client.close()
+
+
+async def test_badges_manage_page_uses_codemirror_importmap(db_app_badges_manage):
+    """badges_manage page MUST NOT contain bare Milkdown CDN imports and MUST use importmap for CodeMirror.
+
+    Spec: badge-description-editor — "The editor SHALL be initialized via an
+    <script type='importmap'> block; bare CDN imports without importmap SHALL NOT be used."
+    """
+    app, teacher, cls = db_app_badges_manage
+    cookies = _auth_cookie(str(teacher.id), int(TEACHER))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", cookies=cookies) as ac:
+        response = await ac.get(f"/pages/classes/{cls.id}/badges", follow_redirects=False)
+
+    assert response.status_code == 200
+    content = response.text
+
+    # Bare Milkdown imports SHALL NOT be present
+    assert "@milkdown/core" not in content, "Milkdown bare CDN import must be removed"
+    assert "@milkdown/preset-commonmark" not in content, "Milkdown bare CDN import must be removed"
+
+    # importmap with CodeMirror lang-markdown SHALL be present
+    assert 'type="importmap"' in content, "CodeMirror importmap block is missing"
+    assert "@codemirror/lang-markdown" in content, "@codemirror/lang-markdown must be in importmap"

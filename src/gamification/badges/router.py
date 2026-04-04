@@ -12,7 +12,7 @@ from core.classes.models import Class, ClassMembership
 from core.classes.service import can_manage_class
 from core.users.models import User
 from gamification.badges.models import BadgeAward, BadgeDefinition
-from gamification.badges.service import award_badge, get_student_badges
+from gamification.badges.service import active_awards_query, award_badge, get_student_badges, revoke_badge
 from gamification.points.models import PointTransaction
 from gamification.triggers.service import get_rules_for_class
 from pages.deps import get_page_user
@@ -43,6 +43,10 @@ class BadgeUpdateRequest(BaseModel):
 class ManualAwardRequest(BaseModel):
     student_id: str
     reason: Optional[str] = None
+
+
+class RevokeAwardRequest(BaseModel):
+    award_id: str
 
 
 @router.post("/classes/{class_id}/badges", status_code=status.HTTP_201_CREATED)
@@ -129,7 +133,7 @@ async def delete_badge(
         raise HTTPException(status_code=404, detail="Badge not found")
 
     # Prevent deletion if badge has been awarded
-    award_count = await BadgeAward.find(
+    award_count = await active_awards_query(
         BadgeAward.badge_id == badge_id,
         BadgeAward.class_id == class_id,
     ).count()
@@ -182,6 +186,119 @@ async def manual_award_badge(
             detail="Student already holds this badge",
         )
     return {"awarded": True, "award_id": str(award.id)}
+
+
+@router.get("/classes/{class_id}/badges/{badge_id}/detail")
+async def badge_detail(
+    class_id: str,
+    badge_id: str,
+    teacher: User = Depends(require_permission(MANAGE_TASKS)),
+):
+    """Return badge metadata plus awarded/not-awarded student lists (active awards only)."""
+    cls = await Class.get(class_id)
+    if cls is None or not await can_manage_class(teacher, cls):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+
+    badge = await BadgeDefinition.get(badge_id)
+    if badge is None or badge.class_id != class_id:
+        raise HTTPException(status_code=404, detail="Badge not found")
+
+    # Fetch all student members of the class
+    memberships = await ClassMembership.find(
+        ClassMembership.class_id == class_id,
+        ClassMembership.role == "student",
+    ).to_list()
+    student_ids = [m.user_id for m in memberships]
+
+    # Fetch student display names
+    student_names: dict[str, str] = {}
+    for sid in student_ids:
+        u = await User.get(sid)
+        student_names[sid] = u.display_name if u else sid
+
+    # Active awards for this badge
+    active_awards = await active_awards_query(
+        BadgeAward.badge_id == badge_id,
+        BadgeAward.class_id == class_id,
+    ).to_list()
+    awarded_student_ids = {a.student_id for a in active_awards}
+
+    awarded = [
+        {
+            "award_id": str(a.id),
+            "student_id": a.student_id,
+            "student_name": student_names.get(a.student_id, a.student_id),
+            "awarded_at": a.awarded_at.isoformat(),
+            "awarded_by": a.awarded_by,
+            "reason": a.reason,
+        }
+        for a in active_awards
+    ]
+    not_awarded = [
+        {
+            "student_id": sid,
+            "student_name": student_names.get(sid, sid),
+        }
+        for sid in student_ids
+        if sid not in awarded_student_ids
+    ]
+
+    return {
+        "badge": {
+            "id": str(badge.id),
+            "name": badge.name,
+            "icon": badge.icon,
+            "description": badge.description,
+            "trigger_key": badge.trigger_key,
+            "trigger_rule_id": badge.trigger_rule_id,
+        },
+        "is_manual": badge.trigger_key is None and badge.trigger_rule_id is None,
+        "awarded": awarded,
+        "not_awarded": not_awarded,
+    }
+
+
+@router.post("/classes/{class_id}/badges/{badge_id}/revoke")
+async def revoke_badge_award(
+    class_id: str,
+    badge_id: str,
+    body: RevokeAwardRequest,
+    teacher: User = Depends(require_permission(MANAGE_TASKS)),
+):
+    """Soft-delete a badge award (set revoked_at/revoked_by)."""
+    cls = await Class.get(class_id)
+    if cls is None or not await can_manage_class(teacher, cls):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+
+    badge = await BadgeDefinition.get(badge_id)
+    if badge is None or badge.class_id != class_id:
+        raise HTTPException(status_code=404, detail="Badge not found")
+
+    # Pre-check: does this award exist and belong here?
+    award_check = await BadgeAward.get(body.award_id)
+    if (
+        award_check is None
+        or award_check.badge_id != badge_id
+        or award_check.class_id != class_id
+    ):
+        raise HTTPException(status_code=404, detail="Award not found")
+
+    if award_check.revoked_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Award already revoked",
+        )
+
+    award = await revoke_badge(
+        award_id=body.award_id,
+        badge_id=badge_id,
+        class_id=class_id,
+        revoked_by=str(teacher.id),
+    )
+    if award is None:
+        raise HTTPException(status_code=404, detail="Award not found")
+
+    return {"revoked": True, "award_id": str(award.id)}
 
 
 @router.get("/students/me/badges")
@@ -247,7 +364,7 @@ async def class_student_stats(
         ).to_list()
         points = sum(t.amount for t in txns)
 
-        badge_count = await BadgeAward.find(
+        badge_count = await active_awards_query(
             BadgeAward.student_id == sid,
             BadgeAward.class_id == class_id,
         ).count()
@@ -345,7 +462,7 @@ async def badges_manage_page(
 
     badges = []
     for b in badge_defs:
-        award_count = await BadgeAward.find(
+        award_count = await active_awards_query(
             BadgeAward.badge_id == str(b.id),
             BadgeAward.class_id == class_id,
         ).count()

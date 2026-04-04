@@ -662,9 +662,32 @@
     overlay.classList.remove('hidden');
   }
 
+  // Rich-HTML variant — for internal hardcoded strings only, never user input
+  function _openHtml(htmlMsg, onClose) {
+    var panel = overlay.querySelector('div');
+    panel.classList.remove('max-w-sm');
+    panel.classList.add('max-w-2xl', 'overflow-y-auto', 'max-h-[85vh]');
+    message.innerHTML = htmlMsg;
+    cancelBtn.classList.add('hidden');
+
+    function cleanup() {
+      overlay.classList.add('hidden');
+      overlay.removeEventListener('click', backdropClose);
+      confirmBtn.onclick = null;
+      panel.classList.add('max-w-sm');
+      panel.classList.remove('max-w-2xl', 'overflow-y-auto', 'max-h-[85vh]');
+      message.innerHTML = '';
+    }
+    confirmBtn.onclick = function () { cleanup(); if (onClose) onClose(); };
+    function backdropClose(e) { if (e.target === overlay) cleanup(); }
+    overlay.addEventListener('click', backdropClose);
+    overlay.classList.remove('hidden');
+  }
+
   window.Modal = {
     confirm: function (msg, onConfirm, onCancel) { _open(msg, onConfirm, onCancel, true); },
     alert: function (msg, onClose) { _open(msg, onClose, null, false); },
+    alertHtml: function (htmlMsg, onClose) { _openHtml(htmlMsg, onClose); },
   };
 })();
 </script>

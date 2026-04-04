@@ -155,13 +155,13 @@ async def dashboard_page(
         })
 
     from gamification.badges.models import BadgeAward
-    from gamification.badges.service import get_student_badges
+    from gamification.badges.service import active_awards_query, get_student_badges
     from gamification.points.service import get_balance
     from tasks.submissions.models import TaskSubmission
 
     user_id = str(current_user.id)
     total_points = await get_balance(user_id)
-    badge_count = await BadgeAward.find(BadgeAward.student_id == user_id).count()
+    badge_count = await active_awards_query(BadgeAward.student_id == user_id).count()
     submission_count = await TaskSubmission.find(TaskSubmission.student_id == user_id).count()
     badges = await get_student_badges(user_id)
 
@@ -172,7 +172,7 @@ async def dashboard_page(
     submissions = await TaskSubmission.find(
         TaskSubmission.student_id == user_id
     ).sort(-TaskSubmission.submitted_at).limit(20).to_list()
-    badge_awards = await BadgeAward.find(
+    badge_awards = await active_awards_query(
         BadgeAward.student_id == user_id
     ).sort(-BadgeAward.awarded_at).limit(20).to_list()
 

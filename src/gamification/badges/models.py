@@ -6,6 +6,7 @@ from beanie import Document
 from pydantic import Field, model_validator
 
 
+
 class BadgeDefinition(Document):
     """A badge that can be awarded to students."""
     class_id: str
@@ -34,6 +35,9 @@ class BadgeAward(Document):
     awarded_by: str = "system"  # "system" or teacher user_id
     reason: Optional[str] = None
     awarded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Soft delete fields — None means active, non-None means revoked
+    revoked_at: Optional[datetime] = None
+    revoked_by: Optional[str] = None  # teacher user_id who revoked
 
     class Settings:
         name = "badgeawards"
