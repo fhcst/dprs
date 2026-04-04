@@ -144,6 +144,37 @@ async def api_teacher(db):
 
 
 @pytest.fixture
+async def api_class(db, api_teacher):
+    """A real Class document with valid ObjectId for API tests."""
+    from core.classes.models import Class, ClassMembership
+    cls = Class(
+        name="API Test Class",
+        description="",
+        visibility="private",
+        owner_id=str(api_teacher.id),
+        invite_code="APITEST1",
+    )
+    await cls.insert()
+    await ClassMembership(
+        class_id=str(cls.id), user_id=str(api_teacher.id), role="teacher",
+    ).insert()
+    return cls
+
+
+@pytest.fixture
+async def api_template(db, api_teacher, api_class):
+    """Template associated with a real Class (valid ObjectId)."""
+    from tasks.templates.service import create_template
+    return await create_template(
+        name="API Test Template",
+        description="",
+        class_id=str(api_class.id),
+        fields=[{"name": "note", "field_type": "text", "required": False}],
+        owner=api_teacher,
+    )
+
+
+@pytest.fixture
 async def api_client(db, api_app, api_teacher):
     from httpx import AsyncClient, ASGITransport
     from core.auth.jwt import create_access_token
@@ -156,12 +187,12 @@ async def api_client(db, api_app, api_teacher):
         yield ac
 
 
-async def test_schedule_rule_range_returns_correct_count(db, api_client, template):
+async def test_schedule_rule_range_returns_correct_count(db, api_client, api_class, api_template):
     """POST range rule with no weekday filter returns all days in range."""
     resp = await api_client.post(
-        "/classes/cls_sched/schedule-rules",
+        f"/classes/{api_class.id}/schedule-rules",
         json={
-            "template_id": str(template.id),
+            "template_id": str(api_template.id),
             "schedule_type": "range",
             "start_date": "2026-04-01",
             "end_date": "2026-04-07",
@@ -174,13 +205,13 @@ async def test_schedule_rule_range_returns_correct_count(db, api_client, templat
     assert data["assignments_created"] == 7
 
 
-async def test_schedule_rule_weekday_filter_is_correct(db, api_client, template):
+async def test_schedule_rule_weekday_filter_is_correct(db, api_client, api_class, api_template):
     """POST range rule with weekday filter [0,4] returns only Mon/Fri."""
     # 2026-04-06=Mon ... 2026-04-12=Sun → 2 assignments (Mon + Fri)
     resp = await api_client.post(
-        "/classes/cls_sched/schedule-rules",
+        f"/classes/{api_class.id}/schedule-rules",
         json={
-            "template_id": str(template.id),
+            "template_id": str(api_template.id),
             "schedule_type": "range",
             "start_date": "2026-04-06",
             "end_date": "2026-04-12",
@@ -193,12 +224,12 @@ async def test_schedule_rule_weekday_filter_is_correct(db, api_client, template)
     assert data["assignments_created"] == 2
 
 
-async def test_schedule_rule_open_capped_at_90(db, api_client, template):
+async def test_schedule_rule_open_capped_at_90(db, api_client, api_class, api_template):
     """POST open rule creates at most 90 assignments."""
     resp = await api_client.post(
-        "/classes/cls_sched/schedule-rules",
+        f"/classes/{api_class.id}/schedule-rules",
         json={
-            "template_id": str(template.id),
+            "template_id": str(api_template.id),
             "schedule_type": "open",
             "start_date": "2026-01-01",
             "max_submissions_per_student": 0,

@@ -13,6 +13,7 @@ async def setup_app():
     from core.system.router import router as system_router
     from core.users.models import User
     from core.system.models import SystemConfig
+    from shared.limiter import limiter
 
     client = AsyncMongoMockClient()
     db = client.get_database("test_setup_wizard")
@@ -27,7 +28,11 @@ async def setup_app():
     from pages.router import router as pages_router
     app.include_router(pages_router)
     app.include_router(system_router)
+
+    # Disable rate limiter in tests to prevent cross-test state leakage
+    limiter.enabled = False
     yield app, r
+    limiter.enabled = True
 
     await r.aclose()
     client.close()
