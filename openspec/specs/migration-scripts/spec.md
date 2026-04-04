@@ -228,7 +228,7 @@ tests:
 ---
 ### Requirement: Migration CLI
 
-The system SHALL provide `scripts/migrate.py` as a CLI entry point. It MUST support: `init` (create tracking collection), `up` (apply all pending migrations in order), `down` (roll back the last applied migration), and `status` (list applied and pending migrations).
+The system SHALL provide `scripts/migrate.py` as a CLI entry point. It MUST support: `init` (create tracking collection), `up` (apply all pending migrations in order), `down` (roll back the last applied migration), and `status` (list applied and pending migrations). The CLI MUST add the project root directory to `sys.path` at startup to ensure `scripts.migrations.*` modules are importable regardless of the working directory.
 
 #### Scenario: `migrate.py up` applies pending migrations
 
@@ -247,102 +247,14 @@ The system SHALL provide `scripts/migrate.py` as a CLI entry point. It MUST supp
 
 
 <!-- @trace
-source: daily-training-submission-system
-updated: 2026-03-18
+source: docker-entrypoint-auto-migration
+updated: 2026-04-04
 code:
-  - src/gamification/__init__.py
-  - src/core/classes/router.py
-  - src/core/classes/service.py
-  - scripts/__init__.py
-  - src/extensions/protocols/reward.py
-  - src/extensions/registry/__init__.py
-  - src/extensions/protocols/__init__.py
-  - src/tasks/checkin/router.py
-  - src/templates/teacher/templates_list.html
-  - LICENSE
-  - uv.lock
-  - src/core/users/__init__.py
-  - src/gamification/points/service.py
-  - src/templates/community/leaderboard.html
-  - src/templates/shared/base.html
-  - src/templates/teacher/template_form.html
-  - src/core/auth/__init__.py
-  - src/tasks/templates/models.py
-  - src/templates/teacher/points_manage.html
-  - src/templates/community/feed.html
-  - src/community/feed/router.py
-  - src/extensions/protocols/validator.py
-  - src/shared/database.py
-  - src/core/classes/__init__.py
-  - src/tasks/checkin/service.py
-  - src/tasks/templates/service.py
-  - src/gamification/badges/__init__.py
-  - src/gamification/points/models.py
-  - src/tasks/checkin/__init__.py
-  - src/community/feed/__init__.py
-  - src/gamification/prizes/__init__.py
-  - src/core/auth/deps.py
-  - src/core/auth/jwt.py
-  - src/extensions/deps.py
-  - docker-compose.yml
-  - src/community/__init__.py
-  - src/core/auth/local_provider.py
-  - src/core/classes/models.py
-  - src/gamification/badges/router.py
-  - src/gamification/leaderboard/router.py
-  - scripts/migrations/__init__.py
-  - src/gamification/points/router.py
-  - src/main.py
-  - src/extensions/registry/core.py
-  - src/shared/__init__.py
-  - src/tasks/checkin/models.py
-  - src/core/users/router.py
-  - pytest.ini
-  - scripts/migrations/20260317_001_initial_indexes.py
-  - src/tasks/submissions/__init__.py
-  - src/community/feed/models.py
-  - src/core/users/models.py
-  - src/gamification/leaderboard/__init__.py
-  - src/templates/student/badges.html
-  - src/tasks/templates/router.py
-  - src/gamification/points/providers.py
-  - src/templates/student/dashboard.html
-  - src/extensions/protocols/badge.py
-  - src/tasks/templates/__init__.py
-  - src/core/auth/password.py
-  - src/extensions/__init__.py
-  - src/gamification/points/__init__.py
-  - pyproject.toml
-  - src/extensions/protocols/auth.py
-  - src/tasks/__init__.py
-  - src/gamification/prizes/models.py
-  - src/tasks/submissions/router.py
-  - src/gamification/badges/service.py
-  - src/tasks/submissions/models.py
-  - src/gamification/prizes/router.py
-  - src/templates/student/submit_task.html
   - scripts/migrate.py
-  - src/core/__init__.py
-  - src/gamification/badges/models.py
-  - src/core/auth/router.py
-  - src/tasks/submissions/service.py
-  - src/gamification/badges/triggers.py
-tests:
-  - tests/test_checkin.py
-  - tests/test_database.py
-  - tests/test_extensions.py
-  - tests/test_points.py
-  - tests/test_task_templates.py
-  - tests/test_classes.py
-  - tests/test_submissions.py
-  - tests/test_leaderboard.py
-  - tests/test_feed.py
-  - tests/test_prizes.py
-  - tests/test_migration.py
-  - tests/test_module_structure.py
-  - tests/test_auth.py
-  - tests/test_badges.py
-  - scripts/migrations/test_example_migration.py
+  - .env.example
+  - scripts/docker-entrypoint.sh
+  - src/core/users/models.py
+  - Dockerfile
 -->
 
 ---
@@ -452,4 +364,79 @@ tests:
   - tests/test_auth.py
   - tests/test_badges.py
   - scripts/migrations/test_example_migration.py
+-->
+
+---
+### Requirement: Automatic migration on container startup
+
+The Docker entrypoint script (`scripts/docker-entrypoint.sh`) SHALL execute `migrate.py init` followed by `migrate.py up` before starting the FastAPI server. If any migration step fails, the container MUST exit immediately without starting the application.
+
+#### Scenario: Container starts with pending migrations
+
+- **WHEN** the Docker container starts and there are unapplied migration files
+- **THEN** the entrypoint SHALL run all pending migrations to completion before launching the FastAPI server
+
+#### Scenario: Container starts with no pending migrations
+
+- **WHEN** the Docker container starts and all migrations are already applied
+- **THEN** the entrypoint SHALL print "Nothing to migrate." and proceed to start the FastAPI server without error
+
+#### Scenario: Migration fails during container startup
+
+- **WHEN** the Docker container starts and a migration's `forward()` raises an exception
+- **THEN** the entrypoint SHALL exit with a non-zero code and the FastAPI server SHALL NOT start
+
+
+<!-- @trace
+source: docker-entrypoint-auto-migration
+updated: 2026-04-04
+code:
+  - scripts/migrate.py
+  - .env.example
+  - scripts/docker-entrypoint.sh
+  - src/core/users/models.py
+  - Dockerfile
+-->
+
+---
+### Requirement: Migration module importable in container environment
+
+The migration CLI (`scripts/migrate.py`) SHALL ensure that the project root directory is in `sys.path` so that `importlib.import_module("scripts.migrations.<name>")` resolves correctly in all execution environments, including Docker containers where the working directory is `/app`.
+
+#### Scenario: Migration loaded inside Docker container
+
+- **WHEN** `migrate.py up` is invoked inside the Docker container at working directory `/app`
+- **THEN** the CLI SHALL successfully import each migration file under `scripts/migrations/` without `ModuleNotFoundError`
+
+
+<!-- @trace
+source: docker-entrypoint-auto-migration
+updated: 2026-04-04
+code:
+  - scripts/migrate.py
+  - .env.example
+  - scripts/docker-entrypoint.sh
+  - src/core/users/models.py
+  - Dockerfile
+-->
+
+---
+### Requirement: Scripts directory included in Docker image
+
+The `Dockerfile` SHALL copy the entire `scripts/` directory (including `migrate.py` and `migrations/`) into the Docker image so that the entrypoint can execute migrations at container startup.
+
+#### Scenario: Docker image contains migration files
+
+- **WHEN** the Docker image is built from the Dockerfile
+- **THEN** the image SHALL contain `scripts/migrate.py` and all files under `scripts/migrations/` at the path `/app/scripts/`
+
+<!-- @trace
+source: docker-entrypoint-auto-migration
+updated: 2026-04-04
+code:
+  - scripts/migrate.py
+  - .env.example
+  - scripts/docker-entrypoint.sh
+  - src/core/users/models.py
+  - Dockerfile
 -->

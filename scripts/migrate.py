@@ -23,7 +23,9 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 COLLECTION_NAME = "migrations"
 MIGRATION_PATTERN = re.compile(r"^\d{8}_\d{3}_\w+\.py$")
 
-# Add scripts directory to sys.path so migration files can import project modules
+# Add project root to sys.path so `scripts.migrations.*` can be imported
+sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src directory to sys.path so migration files can import project modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 

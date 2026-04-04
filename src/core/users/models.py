@@ -4,6 +4,7 @@ from enum import Enum
 
 from beanie import Document
 from pydantic import BaseModel, Field
+from pymongo import IndexModel
 
 
 class IdentityTag(str, Enum):
@@ -36,4 +37,6 @@ class User(Document):
 
     class Settings:
         name = "users"
-        indexes = ["username"]
+        indexes = [
+            IndexModel([("username", 1)], unique=True),
+        ]

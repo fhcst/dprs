@@ -42,6 +42,7 @@ RUN uv pip install /tmp/wheels/*.whl && rm -rf /tmp/wheels
 COPY ./crates/dsl-engine/pkg ./crates/dsl-engine/pkg
 
 COPY ./src ./src
+COPY ./scripts ./scripts
 
 # Reduce system loading
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -56,9 +57,8 @@ ENV UVICORN_PORT=8000
 ENV FORWARDED_ALLOW_IPS=""
 
 # Use entrypoint script to handle environment-based startup
-COPY ./scripts/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x ./scripts/docker-entrypoint.sh
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
 
 EXPOSE ${UVICORN_PORT:-8000}
