@@ -166,8 +166,9 @@
 </div>
 
 {# Import result toast #}
-<div id="import-toast" class="hidden fixed bottom-4 right-4 z-50 max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg p-4">
+<div id="import-toast" class="hidden fixed bottom-4 right-4 z-50 max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg p-4">
   <p id="import-toast-msg" class="text-sm text-gray-700 dark:text-gray-300"></p>
+  <ul id="import-toast-details" class="mt-2 text-xs text-red-600 dark:text-red-400 list-disc list-inside max-h-40 overflow-y-auto"></ul>
 </div>
 {% endblock %}
 
@@ -246,10 +247,20 @@ async function importCSV(input) {
   const data = await resp.json();
   const toast = document.getElementById('import-toast');
   const msg = document.getElementById('import-toast-msg');
+  const details = document.getElementById('import-toast-details');
   const failCount = data.failed ? data.failed.length : 0;
   msg.textContent = `匯入完成：成功 ${data.success} 筆${failCount > 0 ? `，失敗 ${failCount} 筆` : ''}`;
+  details.innerHTML = '';
+  if (data.failed && data.failed.length > 0) {
+    data.failed.forEach(f => {
+      const li = document.createElement('li');
+      li.textContent = `第 ${f.row} 行：${f.reason}`;
+      details.appendChild(li);
+    });
+  }
   toast.classList.remove('hidden');
-  setTimeout(() => { toast.classList.add('hidden'); location.reload(); }, 3000);
+  const delay = failCount > 0 ? 8000 : 3000;
+  setTimeout(() => { toast.classList.add('hidden'); location.reload(); }, delay);
   input.value = '';
 }
 </script>

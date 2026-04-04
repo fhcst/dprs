@@ -129,6 +129,14 @@ from gamification.prizes.router import router as prizes_router
 from gamification.leaderboard.router import router as leaderboard_router
 from pages.router import router as pages_router
 
+# --- Static files (DSL WASM engine) ---
+from pathlib import Path as _Path
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_dsl_pkg = _Path(__file__).resolve().parent.parent / "crates" / "dsl-engine" / "pkg"
+if _dsl_pkg.is_dir():
+    app.mount("/static/dsl-engine", _StaticFiles(directory=str(_dsl_pkg)), name="dsl-engine-static")
+
 app.include_router(system_router)
 app.include_router(auth_router)
 app.include_router(pages_router)

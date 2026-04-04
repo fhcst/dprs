@@ -16,6 +16,7 @@ from gamification.badges.service import award_badge, get_student_badges
 from gamification.points.models import PointTransaction
 from gamification.triggers.service import get_rules_for_class
 from pages.deps import get_page_user
+from shared.page_context import build_page_context
 from shared.webpage import webpage
 from tasks.checkin.models import CheckinRecord
 from tasks.submissions.models import TaskSubmission
@@ -320,7 +321,8 @@ async def badges_page(
     user: User = Depends(get_page_user),
 ):
     badges = await get_student_badges(str(user.id))
-    return {"current_user": user, "badges": badges}
+    page_ctx = await build_page_context(user)
+    return {**page_ctx, "badges": badges}
 
 
 # ── Teacher badge management page ────────────────────────────────────────────
@@ -369,8 +371,9 @@ async def badges_manage_page(
         if r.is_active
     ]
 
+    page_ctx = await build_page_context(user)
     return {
-        "current_user": user,
+        **page_ctx,
         "class_id": class_id,
         "class_name": cls.name,
         "badges": badges,

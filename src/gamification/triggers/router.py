@@ -9,6 +9,7 @@ from core.auth.permissions import MANAGE_OWN_CLASS
 from core.classes.models import Class
 from core.classes.service import can_manage_class
 from pages.deps import get_page_user
+from shared.page_context import build_page_context
 from shared.webpage import webpage
 from core.users.models import User
 from gamification.triggers.models import TriggerRule
@@ -183,8 +184,9 @@ async def trigger_rules_page(
             "bound_badge_count": data["bound_badge_count"],
         })
 
+    page_ctx = await build_page_context(user)
     return {
-        "current_user": user,
+        **page_ctx,
         "class_id": class_id,
         "class_name": cls.name,
         "rules": rule_list,

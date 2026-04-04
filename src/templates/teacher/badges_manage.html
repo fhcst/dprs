@@ -242,12 +242,12 @@ async function initMilkdown(initialValue = '') {
   mount.innerHTML = '';
 
   editorInstance = await Editor.make()
+    .use(commonmark)
+    .config(nord)
     .config((ctx) => {
       ctx.set(rootCtx, mount);
       ctx.set(defaultValueCtx, initialValue);
     })
-    .config(nord)
-    .use(commonmark)
     .create();
 }
 
