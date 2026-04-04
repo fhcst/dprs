@@ -45,45 +45,9 @@
    - **可見度**（Visibility）— `public`（公開）或 `private`（私有），預設為 `public`
 3. 送出後，系統自動產生一組 **Invite Code（邀請碼）**
 
-### 對應 API
-
-```
-POST /classes
-```
-
-Request Body：
-
-```json
-{
-  "name": "112 上學期體育訓練班",
-  "description": "每日體能訓練紀錄",
-  "visibility": "public"
-}
-```
-
-Response（成功 `201`）：
-
-```json
-{
-  "id": "class_abc123",
-  "name": "112 上學期體育訓練班",
-  "invite_code": "XK9F2M"
-}
-```
-
 ### 變更可見度
 
-建立後可隨時切換班級的 Visibility：
-
-```
-PATCH /classes/{class_id}/visibility
-```
-
-```json
-{
-  "visibility": "private"
-}
-```
+建立後可隨時在班級設定中切換 Visibility：
 
 - **Public 班級**：學生可在公開班級清單中看到並直接加入
 - **Private 班級**：學生必須持有 Invite Code 才能加入
@@ -98,52 +62,21 @@ DPRS 提供兩種邀請方式：
 
 將邀請碼提供給學生（口頭、訊息、公告等），學生自行在系統中輸入邀請碼加入。
 
-如需重新產生邀請碼（例如舊碼外洩），可使用：
-
-```
-POST /classes/{class_id}/invite-code/regenerate
-```
+如需重新產生邀請碼（例如舊碼外洩），可在班級設定頁面點選「重新產生邀請碼」。
 
 > **注意：** 重新產生後，舊的邀請碼將立即失效。
 
 ### 方式二：批次邀請（Batch Invite）
 
-教師可搜尋尚未加入班級的學生，再一次批量加入。
+教師可在「邀請成員」頁面搜尋尚未加入班級的學生，再一次批量加入：
 
-**步驟 1：搜尋學生**
-
-```
-GET /classes/{class_id}/invite/search?q=王&type=name
-```
-
-- `q` — 搜尋關鍵字
-- `type` — 搜尋類型：`name`（姓名）或 `class_name`（行政班級名稱）
-
-**步驟 2：批次加入**
-
-```
-POST /classes/{class_id}/invite/batch
-```
-
-```json
-{
-  "user_ids": ["user_001", "user_002", "user_003"]
-}
-```
-
-Response：
-
-```json
-{
-  "added": 3
-}
-```
+1. 在搜尋欄輸入姓名或行政班級名稱
+2. 勾選要加入的學生
+3. 點選「批次加入」確認
 
 ### 成員管理
 
-- **查看成員清單**：`GET /classes/{class_id}/members`
-- **移除成員**：`DELETE /classes/{class_id}/members/{user_id}`
-- **提升為教師（Co-teacher）**：`PATCH /classes/{class_id}/members/{user_id}/promote`
+在班級成員頁面可查看目前所有成員、移除成員，或將成員提升為 Co-teacher（協同教師）。
 
 ---
 
@@ -169,31 +102,12 @@ Task Template（任務範本）定義了學生每日需要填寫的表單結構�
 | `number` | 數值 | 跑步距離（公里） |
 | `checkbox` | 勾選方塊 | 是否完成伸展 |
 
-### 對應 API
-
-```
-POST /classes/{class_id}/templates
-```
-
-```json
-{
-  "name": "體能訓練日誌",
-  "description": "每日體能訓練紀錄表",
-  "fields": [
-    { "name": "訓練項目", "field_type": "text", "required": true },
-    { "name": "訓練時間（分鐘）", "field_type": "number", "required": true },
-    { "name": "訓練心得", "field_type": "markdown", "required": false },
-    { "name": "已完成收操", "field_type": "checkbox", "required": false }
-  ]
-}
-```
-
 ### 編輯與封存
 
-- **編輯範本**：`PATCH /templates/{template_id}` — 可更新 `name`、`description`、`fields`
-- **封存範本**：`PATCH /templates/{template_id}/archive` — 不再使用但保留紀錄
-- **取消封存**：`PATCH /templates/{template_id}/unarchive`
-- **刪除範本**：`DELETE /templates/{template_id}` — 僅在無關聯資料時可刪除，否則回傳 `409 Conflict`
+- **編輯範本**：進入範本詳細頁，點選「編輯」可更新名稱、說明及欄位定義
+- **封存範本**：點選「封存」將範本標記為不再使用，但保留歷史紀錄
+- **取消封存**：已封存範本可再次啟用
+- **刪除範本**：僅在無關聯提交資料時可刪除；若有關聯資料，系統會提示無法刪除
 
 ---
 
@@ -203,18 +117,7 @@ POST /classes/{class_id}/templates
 
 ### 方式一：單次指派
 
-將範本指派到特定日期：
-
-```
-POST /classes/{class_id}/template-assignments
-```
-
-```json
-{
-  "template_id": "tmpl_abc123",
-  "date": "2026-04-01"
-}
-```
+在指派頁面選擇範本及目標日期，點選「指派」即可將範本指派到特定日期。
 
 ### 方式二：排程規則（Schedule Rule）
 
@@ -222,44 +125,15 @@ POST /classes/{class_id}/template-assignments
 
 #### `once` — 單次
 
-指定單一日期：
-
-```json
-{
-  "template_id": "tmpl_abc123",
-  "schedule_type": "once",
-  "date": "2026-04-01"
-}
-```
+指定單一日期進行指派。
 
 #### `range` — 日期範圍
 
-在 `start_date` 到 `end_date` 之間，依 `weekdays` 篩選指派日：
-
-```json
-{
-  "template_id": "tmpl_abc123",
-  "schedule_type": "range",
-  "start_date": "2026-04-01",
-  "end_date": "2026-04-30",
-  "weekdays": [0, 1, 2, 3, 4]
-}
-```
-
-> `weekdays` 對照：0 = 週一、1 = 週二、...、6 = 週日。空陣列 `[]` 代表每天。
+設定起訖日期，並選擇要指派的星期（0 = 週一 ... 6 = 週日），系統會在範圍內符合星期條件的每天自動建立指派。不選擇特定星期則每天皆指派。
 
 #### `open` — 開放式
 
-從 `start_date` 開始，無結束日期：
-
-```json
-{
-  "template_id": "tmpl_abc123",
-  "schedule_type": "open",
-  "start_date": "2026-04-01",
-  "weekdays": [0, 1, 2, 3, 4]
-}
-```
+從指定開始日期起，無結束日期，依星期條件持續指派。
 
 ### 額外選項
 
@@ -267,20 +141,6 @@ POST /classes/{class_id}/template-assignments
 |------|------|
 | `max_submissions_per_student` | 每位學生最大提交次數，`0` 表示不限制 |
 | `sync_discord` | 設為 `true` 時，建立排程後自動透過 Discord Webhook 發送通知（需先設定 Webhook，見[第 10 節](#10-discord-webhook-整合)）|
-
-### 對應 API
-
-```
-POST /classes/{class_id}/schedule-rules
-```
-
-Response：
-
-```json
-{
-  "assignments_created": 22
-}
-```
 
 ---
 
@@ -290,49 +150,25 @@ Check-in（簽到）系統讓教師管控學生每日出席。教師可設定哪
 
 ### 全域設定（Global Config）
 
-設定班級的常態簽到規則：
+進入班級管理 > 簽到設定頁面，設定班級的常態簽到規則：
 
-```
-POST /classes/{class_id}/checkin-config
-```
-
-```json
-{
-  "active_weekdays": [0, 1, 2, 3, 4],
-  "window_start": "08:00",
-  "window_end": "09:30"
-}
-```
-
-| 參數 | 說明 |
+| 欄位 | 說明 |
 |------|------|
-| `active_weekdays` | 啟用簽到的星期，0 = 週一 ... 6 = 週日 |
-| `window_start` | 簽到開始時間（HH:MM，UTC） |
-| `window_end` | 簽到結束時間（HH:MM，UTC） |
+| 啟用星期 | 選擇哪幾天啟用簽到（週一 = 0 ... 週日 = 6） |
+| 簽到開始時間 | 簽到窗口的開始時間（HH:MM，UTC） |
+| 簽到結束時間 | 簽到窗口的結束時間（HH:MM，UTC） |
 
-> 若不設定 `window_start` / `window_end`，則全天皆可簽到。
+> 若不設定開始／結束時間，則全天皆可簽到。
 
 ### 每日覆寫（Daily Override）
 
-針對特殊日期覆蓋全域設定（如假日停止簽到、延長時間等）：
+針對特殊日期覆蓋全域設定（如假日停止簽到、補課日延長時段等）：
 
-```
-POST /classes/{class_id}/checkin-overrides
-```
-
-```json
-{
-  "date": "2026-04-05",
-  "active": false
-}
-```
-
-| 參數 | 說明 |
+| 欄位 | 說明 |
 |------|------|
-| `date` | 目標日期（YYYY-MM-DD） |
-| `active` | `true` = 啟用、`false` = 停用 |
-| `window_start` | 覆寫該日的開始時間（選填） |
-| `window_end` | 覆寫該日的結束時間（選填） |
+| 日期 | 目標日期 |
+| 啟用 | 啟用或停用當日簽到 |
+| 開始／結束時間 | 覆寫當日的簽到時段（選填） |
 
 > **範例：** 清明節停止簽到 → `active: false`；補課日延長時段 → `active: true, window_start: "07:00", window_end: "10:00"`。
 
@@ -342,56 +178,22 @@ POST /classes/{class_id}/checkin-overrides
 
 ### 查看提交
 
-教師可依班級與日期查看所有學生的提交：
-
-```
-GET /classes/{class_id}/submissions?date_param=2026-04-01
-```
-
-不指定 `date_param` 時，預設顯示當日的提交。
-
-Web 介面提供按學生分組的審閱頁面，顯示每位學生的提交記錄。
+進入班級管理 > 提交審閱頁面，可選擇日期檢視所有學生的提交記錄（預設顯示當日）。審閱頁面按學生分組顯示，方便逐筆審查。
 
 ### 核准提交（Approve）
 
-```
-POST /api/submissions/{submission_id}/approve
-```
+點選提交旁的「核准」按鈕：
 
 - 核准後，系統自動發布至社群動態（Community Feed）
 - 若該提交先前曾被退回，核准時會自動補回先前扣除的 Submission Points（提交點數）
 
 ### 退回提交（Reject）
 
-```
-POST /api/submissions/{submission_id}/reject
-```
-
-```json
-{
-  "rejection_reason": "訓練時間記錄不完整，請補充實際訓練分鐘數",
-  "resubmit_deadline": "2026-04-03T23:59:00Z"
-}
-```
-
-| 參數 | 說明 |
-|------|------|
-| `rejection_reason` | 退回原因（必填，不可為空白） |
-| `resubmit_deadline` | 重新提交期限（ISO 8601 格式，選填） |
-
-退回時系統會自動扣回該筆提交的 Submission Points。學生可在期限前重新提交。
+點選「退回」按鈕，填寫退回原因（必填），並可選擇設定重新提交期限。退回時系統會自動扣回該筆提交的 Submission Points。學生可在期限前重新提交。
 
 ### 新增評語（Comment）
 
-```
-POST /api/submissions/{submission_id}/comment
-```
-
-```json
-{
-  "comment": "跑步姿勢進步很多，繼續保持！"
-}
-```
+點選「新增評語」可對提交留下文字回饋，評語對學生可見。
 
 ---
 
@@ -408,18 +210,7 @@ POST /api/submissions/{submission_id}/comment
 
 ### 出席更正（Attendance Correction）
 
-```
-POST /api/classes/{class_id}/attendance/correct
-```
-
-```json
-{
-  "student_id": "user_001",
-  "date": "2026-04-01",
-  "status": "late",
-  "partial_points": 3
-}
-```
+在出席管理頁面點選學生的出席狀態，選擇更正類型後送出。
 
 #### 更正類型
 
@@ -434,138 +225,119 @@ POST /api/classes/{class_id}/attendance/correct
 
 ## 9. 遊戲化設定
 
-DPRS 的 Gamification（遊戲化）系統包含四大模組，皆以班級為單位進行設定。
+DPRS 的 Gamification（遊戲化）系統包含多個模組，皆以班級為單位進行設定。
 
 ### 9.1 點數系統（Points）
 
-每個班級可獨立配置自動獎勵的點數額度：
+每個班級可獨立配置自動獎勵的點數額度。進入班級設定 > 點數設定頁面調整：
 
-```
-PATCH /classes/{class_id}/point-config
-```
-
-```json
-{
-  "checkin_points": 5,
-  "submission_points": 10
-}
-```
-
-| 參數 | 說明 | 預設值 |
+| 欄位 | 說明 | 預設值 |
 |------|------|--------|
-| `checkin_points` | 每次成功簽到自動獲得的點數 | 5 |
-| `submission_points` | 每次成功提交自動獲得的點數 | 10 |
+| 簽到點數 | 每次成功簽到自動獲得的點數 | 5 |
+| 提交點數 | 每次成功提交自動獲得的點數 | 10 |
 
 #### 手動扣點
 
-教師可對個別學生手動扣除點數：
-
-```
-POST /api/points/deduct
-```
-
-```json
-{
-  "student_id": "user_001",
-  "class_id": "class_abc123",
-  "amount": 5,
-  "reason": "未依規定穿著訓練服裝"
-}
-```
+在學生點數頁面，點選「手動扣點」，輸入扣除金額及原因後確認。
 
 #### 撤銷點數
 
-針對特定學生撤銷點數（用途與扣點類似，但語意為「撤銷先前的獎勵」）：
-
-```
-POST /classes/{class_id}/students/{student_id}/point-revoke
-```
-
-```json
-{
-  "amount": 10,
-  "reason": "誤發獎勵點數"
-}
-```
+針對特定學生撤銷點數（語意為「撤銷先前的獎勵」）：在學生點數頁面點選「撤銷點數」，輸入撤銷金額及原因後確認。
 
 ### 9.2 徽章（Badges）
 
-Badge（徽章）是授予學生的成就標記。
+Badge（徽章）是授予學生的成就標記。進入班級管理 > 徽章頁面，可查看該班所有已建立的徽章卡片。
 
-#### 建立徽章
+#### Badge Detail Modal
+
+點選任一徽章卡片，即可開啟 Badge Detail Modal（徽章詳細視窗）。Modal 顯示：
+
+- 徽章的基本 metadata（名稱、說明、圖示、觸發規則）
+- **已獲得名單**：目前持有此徽章的學生列表
+- **未獲得名單**：尚未持有此徽章的學生列表
+
+#### 撤銷徽章（Soft Delete Revoke）
+
+在 Modal 的「已獲得名單」中，點選學生旁的「撤銷」按鈕，即可撤銷該學生的徽章。
+
+撤銷採用 Soft Delete（軟刪除）機制：
+
+- 撤銷紀錄保留於資料庫以維持審計軌跡（Audit Trail）
+- 被撤銷的徽章不再顯示為有效（不計入學生的徽章清單）
+- 同一位學生未來仍可重新獲得同一徽章（例如再次滿足觸發條件）
+
+> 同一位學生不會重複獲得相同的徽章。若學生已持有有效的徽章，系統不會重複頒發。
+
+### 9.3 DSL 觸發規則管理
+
+每個徽章可設定一條 DSL（Domain-Specific Language）觸發規則，系統會在學生每次簽到或提交後自動評估規則是否成立，並在條件符合時自動頒發徽章。
+
+#### 進入觸發規則頁面
+
+在班級 Hub 側邊欄點選「觸發規則」，進入該班的觸發規則管理頁面。
+
+#### CodeMirror 6 編輯器
+
+規則使用內建的 CodeMirror 6 編輯器撰寫。DSL 運算式範例：
 
 ```
-POST /classes/{class_id}/badges
+checkin_streak >= 7 AND submission_count >= 3
 ```
 
-```json
-{
-  "name": "連續簽到七天",
-  "description": "連續七天完成每日簽到",
-  "icon": "🔥",
-  "trigger_key": "streak_7_days"
-}
-```
+**可用變數：**
 
-| 參數 | 說明 |
+| 變數 | 說明 |
 |------|------|
-| `name` | 徽章名稱 |
-| `description` | 徽章說明 |
-| `icon` | 顯示圖示（Emoji） |
-| `trigger_key` | 自動觸發規則的 Key。設定後，系統在學生簽到或提交時自動評估是否符合條件並頒發。設為 `null` 表示僅限手動頒發。|
+| `checkin_streak` | 學生目前的連續簽到天數（streak） |
+| `submission_count` | 學生的總提交次數 |
 
-#### 手動頒發徽章
+**編輯器輔助功能：**
 
-```
-POST /classes/{class_id}/badges/{badge_id}/award
-```
+- **自動補全（Autocomplete）**：按 `Ctrl+Space` 觸發，列出可用變數與運算子
+- **懸浮提示（Hover Hints）**：將滑鼠移到變數或運算子上，顯示說明文件
 
-```json
-{
-  "student_id": "user_001",
-  "reason": "本月訓練表現最佳"
-}
-```
+#### Dry-run 測試
 
-> 同一位學生不會重複獲得相同的徽章。若已持有，API 回傳 `409 Conflict`。
+儲存前可使用 Dry-run 功能預覽規則效果：
 
-### 9.3 獎品（Prizes）
+1. 在 Dry-run 區塊輸入模擬的學生數據（`checkin_streak`、`submission_count`）
+2. 點選「執行測試」
+3. 系統顯示在此數據下規則是否會觸發（fire）
+
+#### 儲存規則
+
+編輯完成後點選「儲存」，規則即生效。每次學生簽到或提交時，系統會自動以該學生的最新數據評估規則。
+
+#### 徽章說明編輯器
+
+徽章的 `description` 欄位使用 Milkdown WYSIWYG 編輯器，支援 Markdown 格式。可直接在視覺化編輯器中輸入格式化文字，系統自動轉換為 Markdown 儲存。
+
+#### DSL 說明 Modal
+
+點選編輯器旁的「?」圖示，開啟 DSL Help Modal，內含完整的 DSL 語法參考，包括所有支援的變數、運算子及運算式範例。
+
+### 9.4 獎品（Prizes）
 
 Prize（獎品）讓學生可用累積的點數兌換實體或線上獎勵。
 
 #### 建立獎品
 
-```
-POST /classes/{class_id}/prizes
-```
+進入班級管理 > 獎品頁面，點選「新增獎品」，填寫以下欄位：
 
-```json
-{
-  "title": "運動毛巾",
-  "description": "DPRS 限定款運動毛巾",
-  "prize_type": "physical",
-  "image_url": "https://example.com/towel.jpg",
-  "point_cost": 100,
-  "visible": true
-}
-```
-
-| 參數 | 說明 |
+| 欄位 | 說明 |
 |------|------|
-| `title` | 獎品名稱 |
-| `description` | 獎品說明 |
-| `prize_type` | `online`（線上獎品）或 `physical`（實體獎品） |
-| `image_url` | 獎品圖片 URL（選填） |
-| `point_cost` | 兌換所需點數 |
-| `visible` | 是否對學生顯示。設為 `false` 可先建立但暫不公開 |
+| 獎品名稱 | 顯示給學生的名稱 |
+| 獎品說明 | 獎品內容描述 |
+| 獎品類型 | `online`（線上獎品）或 `physical`（實體獎品） |
+| 獎品圖片 | 上傳或填入圖片 URL（選填） |
+| 兌換點數 | 學生兌換所需的點數 |
+| 公開顯示 | 關閉時可先建立獎品但暫不對學生公開 |
 
 #### 管理獎品
 
-- **編輯獎品**：`PATCH /prizes/{prize_id}` — 可更新任一欄位
-- **刪除獎品**：`DELETE /prizes/{prize_id}`
-- **查看獎品清單**：`GET /classes/{class_id}/prizes` — 教師可看到所有獎品（含隱藏的），學生僅看到 `visible: true` 的獎品
+在獎品清單頁面可編輯或刪除獎品。教師可看到所有獎品（含隱藏的），學生僅看到已公開的獎品。
 
-### 9.4 排行榜（Leaderboard）
+### 9.5 排行榜（Leaderboard）
 
 Leaderboard（排行榜）根據學生的累積點數自動排名。
 
@@ -578,29 +350,11 @@ Leaderboard（排行榜）根據學生的累積點數自動排名。
 
 #### 查看排行榜
 
-```
-GET /classes/{class_id}/leaderboard
-```
-
-Response（啟用時）：
-
-```json
-{
-  "visible": true,
-  "leaderboard": [
-    { "student_id": "user_001", "display_name": "王小明", "points": 150, "rank": 1 },
-    { "student_id": "user_002", "display_name": "李小華", "points": 120, "rank": 2 }
-  ]
-}
-```
+進入班級 > 排行榜頁面，可查看依累積點數排序的班級成員排名。
 
 #### 跨班排行榜
 
-系統另提供跨班排行榜，彙總所有公開且啟用排行榜的班級：
-
-```
-GET /leaderboard
-```
+系統另提供跨班排行榜，彙總所有公開且啟用排行榜的班級，可在系統首頁或排行榜總覽頁面查看。
 
 ---
 
@@ -610,43 +364,20 @@ DPRS 支援透過 Discord Webhook 將任務指派通知推送至 Discord 頻道�
 
 ### 設定 Webhook URL
 
-```
-PATCH /classes/{class_id}/discord-webhook
-```
+進入班級設定 > Discord 整合頁面，輸入 Discord Webhook URL 並儲存。
 
-```json
-{
-  "webhook_url": "https://discord.com/api/webhooks/1234567890/abcdefg..."
-}
-```
-
-**URL 格式限制：** 必須以下列前綴開頭，否則回傳 `422`：
+**URL 格式限制：** 必須以下列前綴開頭：
 
 - `https://discord.com/api/webhooks/`
 - `https://discordapp.com/api/webhooks/`
 
 ### 清除 Webhook
 
-將 `webhook_url` 設為空字串即可移除：
-
-```json
-{
-  "webhook_url": ""
-}
-```
+在設定頁面將 Webhook URL 清空並儲存，即可移除現有的 Webhook 設定。
 
 ### 搭配排程規則使用
 
-建立 Schedule Rule（排程規則）時，將 `sync_discord` 設為 `true`，系統會在建立指派後自動透過 Webhook 發送任務通知至 Discord。
-
-```json
-{
-  "template_id": "tmpl_abc123",
-  "schedule_type": "once",
-  "date": "2026-04-01",
-  "sync_discord": true
-}
-```
+建立 Schedule Rule（排程規則）時，勾選「同步 Discord 通知」選項，系統會在建立指派後自動透過 Webhook 發送任務通知至 Discord 頻道。
 
 > **前提：** 該班級必須先設定好 Discord Webhook URL，否則通知不會發送（不會報錯，僅靜默跳過）。
 
@@ -658,11 +389,7 @@ PATCH /classes/{class_id}/discord-webhook
 
 ### 封存班級
 
-```
-PATCH /classes/{class_id}/archive
-```
-
-封存後：
+在班級設定頁面點選「封存班級」：
 
 - 班級不會出現在 Dashboard 的主要班級清單中
 - 學生無法再進行簽到或提交
@@ -670,54 +397,6 @@ PATCH /classes/{class_id}/archive
 
 ### 取消封存
 
-若需重新啟用班級：
+若需重新啟用班級，可在封存班級列表中找到該班級，點選「取消封存」。
 
-```
-PATCH /classes/{class_id}/unarchive
-```
-
-> **提示：** 任務範本也可獨立封存（`PATCH /templates/{template_id}/archive`），適用於範本已不再使用但班級仍在運作的情境。
-
----
-
-## 快速參考：API 端點總表
-
-| 分類 | 方法 | 端點 | 說明 |
-|------|------|------|------|
-| **班級** | POST | `/classes` | 建立班級 |
-| | GET | `/classes/public` | 取得公開班級清單 |
-| | PATCH | `/classes/{class_id}/visibility` | 變更可見度 |
-| | PATCH | `/classes/{class_id}/archive` | 封存班級 |
-| | PATCH | `/classes/{class_id}/unarchive` | 取消封存 |
-| **成員** | GET | `/classes/{class_id}/members` | 成員清單 |
-| | DELETE | `/classes/{class_id}/members/{user_id}` | 移除成員 |
-| | PATCH | `/classes/{class_id}/members/{user_id}/promote` | 提升為教師 |
-| | POST | `/classes/{class_id}/invite-code/regenerate` | 重新產生邀請碼 |
-| | GET | `/classes/{class_id}/invite/search` | 搜尋可邀請的學生 |
-| | POST | `/classes/{class_id}/invite/batch` | 批次邀請 |
-| **範本** | POST | `/classes/{class_id}/templates` | 建立範本 |
-| | PATCH | `/templates/{template_id}` | 編輯範本 |
-| | DELETE | `/templates/{template_id}` | 刪除範本 |
-| | PATCH | `/templates/{template_id}/archive` | 封存範本 |
-| | PATCH | `/templates/{template_id}/unarchive` | 取消封存範本 |
-| **指派** | POST | `/classes/{class_id}/template-assignments` | 單次指派 |
-| | POST | `/classes/{class_id}/schedule-rules` | 排程規則 |
-| **簽到** | POST | `/classes/{class_id}/checkin-config` | 設定簽到規則 |
-| | POST | `/classes/{class_id}/checkin-overrides` | 每日覆寫 |
-| **提交** | GET | `/classes/{class_id}/submissions` | 查看提交 |
-| | POST | `/api/submissions/{submission_id}/approve` | 核准提交 |
-| | POST | `/api/submissions/{submission_id}/reject` | 退回提交 |
-| | POST | `/api/submissions/{submission_id}/comment` | 新增評語 |
-| **出席** | POST | `/api/classes/{class_id}/attendance/correct` | 出席更正 |
-| **點數** | PATCH | `/classes/{class_id}/point-config` | 設定點數配置 |
-| | POST | `/api/points/deduct` | 手動扣點 |
-| | POST | `/classes/{class_id}/students/{student_id}/point-revoke` | 撤銷點數 |
-| **徽章** | POST | `/classes/{class_id}/badges` | 建立徽章 |
-| | POST | `/classes/{class_id}/badges/{badge_id}/award` | 手動頒發 |
-| **獎品** | POST | `/classes/{class_id}/prizes` | 建立獎品 |
-| | GET | `/classes/{class_id}/prizes` | 查看獎品清單 |
-| | PATCH | `/prizes/{prize_id}` | 編輯獎品 |
-| | DELETE | `/prizes/{prize_id}` | 刪除獎品 |
-| **排行榜** | GET | `/classes/{class_id}/leaderboard` | 班級排行榜 |
-| | GET | `/leaderboard` | 跨班排行榜 |
-| **Discord** | PATCH | `/classes/{class_id}/discord-webhook` | 設定 Webhook |
+> **提示：** 任務範本也可獨立封存，適用於範本已不再使用但班級仍在運作的情境。在範本列表頁面操作即可。

@@ -3,6 +3,39 @@
 本檔案記錄本專案所有重要變更。格式依循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，
 版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 
+## [1.0.0] - 2026-04-04
+
+### Added（新增）
+
+- **Achievement DSL Engine**（Rust，編譯為 WASM 供前端使用 + PyO3 供後端使用）— 教師可使用表達式語言定義徽章觸發條件（例如 `checkin_streak >= 7 AND submission_count >= 3`）；整合 CodeMirror 6 編輯器，提供即時驗證、自動補全、hover 提示；支援前端 dry-run 測試
+- **徽章管理 v2** — Badge Detail Modal（可查看已頒發/未頒發學生名單）、Soft Delete 撤銷機制並附帶稽核紀錄（audit trail）
+- 徽章管理側邊欄導覽連結
+- DSL Help Modal — 提供完整語法參考說明
+- **邀請碼加入審查流程** — 教師須核准加入申請；系統優先列舉已知學生
+- **Discord 訊息模板自訂** — 教師可自訂 Webhook 通知格式
+- **Docker Buildx 跨平台建置腳本**（`scripts/docker-build.sh`）— 支援 `linux/amd64` + `linux/arm64`
+- **容器啟動自動資料庫遷移**（`docker-entrypoint.sh`）
+- 觸發規則管理 API（`src/gamification/triggers/`）
+
+### Security（安全性）
+
+- **IDOR 修補**：徽章手動頒發端點現已驗證學生班級成員資格
+- **計時旁路漏洞（CWE-208）**：對未知使用者名稱執行假 bcrypt 驗證，防止帳號枚舉攻擊
+- **CSRF 防護**：新增 `src/shared/csrf.py`
+- **速率限制**：新增 `src/shared/limiter.py`
+- **JWT 啟動強制檢查**：生產環境若 `SESSION_SECRET` 為預設值則拋出 `RuntimeError` 拒絕啟動
+- 生產環境強制 Secure Cookie 旗標
+- 學生提交頁面：非成員回傳 HTTP 403
+
+### Fixed（修正）
+
+- 修復徽章管理頁面側邊欄顯示問題
+- 修復 Milkdown 編輯器初始化問題
+- 修復 DSL WASM 靜態檔案 404 錯誤
+- 修復 CSV 匯入缺少錯誤訊息問題
+- 修復 `.env` 與 Docker Compose 變數名稱不符問題
+- **[P0]** 修復打卡流程崩潰問題（Codex Review P0）
+
 ## [0.6.0] - 2026-04-01
 
 ### Added（新增）
@@ -156,7 +189,8 @@
 - README、使用說明、貢獻指南
 - 專案重新命名為 DPRS（Daily Practice Recording System）
 
-[0.6.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.5.0...HEAD
+[1.0.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.1.0...v0.2.0

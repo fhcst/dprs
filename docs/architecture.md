@@ -1,6 +1,6 @@
 # DPRS 系統架構文件
 
-> **Daily Practice Report System（每日練習報告系統）** v0.3.0
+> **Daily Practice Report System（每日練習報告系統）** v1.0.0
 
 ---
 
@@ -30,9 +30,18 @@
 │  │               Services / Providers                     │      │
 │  │  can_manage_class() · RewardProvider · AuthProvider ·  │      │
 │  │  BadgeTrigger · SubmissionValidator                    │      │
-│  └──────────┬─────────────────────────────┬──────────────┘      │
-│             │                             │                      │
-│  ┌──────────▼──────────┐      ┌───────────▼─────────────┐      │
+│  └──────────┬──────────────────────┬───────────────┬─────┘      │
+│             │                      │               │             │
+│             │          ┌───────────▼────────────┐  │             │
+│             │          │  DSL Engine             │  │             │
+│             │          │  crates/dsl-engine/     │  │             │
+│             │          │  ┌─────────┐ ┌────────┐ │  │             │
+│             │          │  │  WASM   │ │  PyO3  │ │  │             │
+│             │          │  │(browser)│ │(server)│ │  │             │
+│             │          │  └─────────┘ └────────┘ │  │             │
+│             │          └────────────────────────-┘  │             │
+│             │                                        │             │
+│  ┌──────────▼──────────┐      ┌─────────────────────▼───┐      │
 │  │  Beanie ODM         │      │  Redis                   │      │
 │  │  (Document Models)  │      │  (Session / State)       │      │
 │  └──────────┬──────────┘      └───────────┬─────────────┘      │
@@ -133,7 +142,7 @@ src/
 │   │   └── router.py          #     徽章管理端點
 │   ├── leaderboard/           #   排行榜
 │   │   └── router.py          #     排行榜查詢端點
-│   ├── triggers/               #   觸發規則管理
+│   ├── triggers/               #   評估 DSL 觸發規則並自動頒發徽章 — 每次簽到或提交事件後由 badgeTrigger 呼叫
 │   │   ├── models.py           #     TriggerRule Document
 │   │   ├── service.py          #     觸發規則 CRUD + CBAC 權限
 │   │   └── router.py           #     觸發規則管理端點

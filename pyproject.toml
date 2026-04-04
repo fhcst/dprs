@@ -1,6 +1,6 @@
 [project]
 name = "dprs"
-version = "0.5.0"
+version = "1.0.0"
 description = "Daily Practice Report System — 教學場域每日練習報告管理平台"
 readme = "README.md"
 license = { text = "ECL-2.0" }

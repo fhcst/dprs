@@ -186,6 +186,38 @@ wasm-pack build --target web --out-dir pkg
 
 ---
 
+## 多架構 Docker 映像建置（Multi-arch Build）
+
+如需建置可同時支援 `linux/amd64` 與 `linux/arm64` 的多架構映像檔（例如發布至 Docker Hub），請使用專屬的建置腳本 `scripts/docker-build.sh`。
+
+> **注意：** 一般本機開發無需使用此腳本，直接執行 `docker compose up --build` 即可。此腳本主要用於正式發布（Release）或分發（Distribution）版本的映像建置。
+
+### 前置需求
+
+- Docker Buildx 已安裝（Docker Desktop 已內建）。
+- 已建立並啟用多平台 Builder（Multi-platform Builder）：
+
+  ```bash
+  docker buildx create --use
+  ```
+
+### 支援平台
+
+- `linux/amd64`
+- `linux/arm64`
+
+### 使用範例
+
+```bash
+# 建置並推送至 Docker Hub（需先 docker login）
+./scripts/docker-build.sh --push --tag yourusername/dprs:1.0.0
+
+# 僅本機建置（不推送）
+./scripts/docker-build.sh --tag dprs:local
+```
+
+---
+
 ## 下一步
 
 - [configuration.md](configuration.md) — 系統進階設定說明

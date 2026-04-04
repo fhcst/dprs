@@ -1,6 +1,6 @@
 [package]
 name = "dsl-engine"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "Achievement DSL expression engine with WASM and PyO3 targets"
 
