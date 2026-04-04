@@ -83,13 +83,13 @@ async def test_local_auth_provider_rejects_unknown_user(db):
 # --- LocalAuthProvider timing side-channel (CWE-208) ---
 
 def test_local_provider_has_dummy_hash_constant():
-    """DUMMY_HASH must exist as a module-level bcrypt hash (not empty/placeholder)."""
+    """DUMMY_HASH must exist as a module-level Argon2id hash (not empty/placeholder)."""
     import core.auth.local_provider as lp
     assert hasattr(lp, "DUMMY_HASH"), "local_provider must expose a DUMMY_HASH constant"
     dummy_hash = lp.DUMMY_HASH
     assert isinstance(dummy_hash, str), "DUMMY_HASH must be a string"
-    assert len(dummy_hash) > 20, "DUMMY_HASH must be a real bcrypt hash, not empty"
-    assert dummy_hash.startswith("$2"), "DUMMY_HASH must be a valid bcrypt hash (starts with $2)"
+    assert len(dummy_hash) > 20, "DUMMY_HASH must be a real Argon2id hash, not empty"
+    assert dummy_hash.startswith("$argon2id$"), "DUMMY_HASH must be a valid Argon2id hash (starts with $argon2id$)"
 
 
 async def test_local_provider_unknown_user_exercises_dummy_hash(db):
@@ -138,6 +138,12 @@ def test_tampered_token_raises():
 
 
 # --- Password hashing ---
+
+def test_password_hash_uses_argon2id_format():
+    from core.auth.password import hash_password
+    h = hash_password("mypassword")
+    assert h.startswith("$argon2id$"), f"Expected Argon2id hash, got: {h[:20]}"
+
 
 def test_password_hashing_is_not_plaintext():
     from core.auth.password import hash_password
