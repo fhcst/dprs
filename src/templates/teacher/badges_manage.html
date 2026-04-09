@@ -222,33 +222,7 @@
   {% endif %}
 </div>
 
-{# ── Badge Detail Modal ───────────────────────────────────────────────────── #}
-<div id="badge-detail-overlay"
-     class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-     onclick="closeBadgeDetailOnOverlay(event)">
-  <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-xl max-h-[80vh] flex flex-col">
-    {# Header #}
-    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-      <div id="detail-header" class="flex items-center gap-3 min-w-0">
-        <span id="detail-icon" class="text-2xl"></span>
-        <div class="min-w-0">
-          <h2 id="detail-name" class="font-heading font-bold text-base text-gray-900 dark:text-gray-100 truncate"></h2>
-          <span id="detail-type-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5"></span>
-        </div>
-      </div>
-      <button type="button" onclick="closeBadgeDetail()"
-              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer shrink-0 ml-3">
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-    {# Body — scrollable #}
-    <div id="detail-body" class="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-      <p class="text-sm text-gray-400 dark:text-gray-500">載入中…</p>
-    </div>
-  </div>
-</div>
+{# Badge Detail Modal — rendered via Modal.dialog() in JS #}
 {% endblock %}
 
 {% block scripts %}
@@ -388,22 +362,26 @@ document.getElementById('badge-form').addEventListener('submit', async (e) => {
 
   const method = id ? 'PUT' : 'POST';
   const url = id ? `${API_BASE}/${id}` : API_BASE;
+  const saveBtn = document.getElementById('save-btn');
 
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      Modal.alert(err.detail || '操作失敗');
-      return;
+  await withLoading(saveBtn, async () => {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Toast.error(err.detail || '操作失敗');
+        return;
+      }
+      Toast.success(id ? '徽章已更新' : '徽章已建立');
+      location.reload();
+    } catch (err) {
+      Toast.error('網路錯誤，請稍後重試');
     }
-    location.reload();
-  } catch (err) {
-    Modal.alert('網路錯誤，請稍後重試');
-  }
+  });
 });
 
 // ── Edit badge (populate form) ──────────────────────────────────────────────
@@ -457,41 +435,46 @@ document.getElementById('cancel-edit-btn').addEventListener('click', () => {
 
 // ── Delete badge ────────────────────────────────────────────────────────────
 window.deleteBadge = function(id, name) {
+  const deleteBtn = document.querySelector(`[data-badge-id="${id}"] button[title="刪除"]`);
   Modal.confirm(`確定要刪除徽章「${name}」嗎？此操作無法復原。`, async () => {
-    try {
-      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        Modal.alert(err.detail || '刪除失敗');
-        return;
+    const doDelete = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          Toast.error(err.detail || '刪除失敗');
+          return;
+        }
+        Toast.success('徽章已刪除');
+        location.reload();
+      } catch (err) {
+        Toast.error('網路錯誤');
       }
-      location.reload();
-    } catch (err) {
-      Modal.alert('網路錯誤');
+    };
+    if (deleteBtn) {
+      await withLoading(deleteBtn, doDelete);
+    } else {
+      await doDelete();
     }
   });
 };
 
-// ── Badge Detail Modal ────────────────────────────────────────────────────────
+// ── Badge Detail Modal (via Modal.dialog) ────────────────────────────────────
 
 let detailCurrentBadgeId = null;
 
 window.openBadgeDetail = async function(badgeId) {
   detailCurrentBadgeId = badgeId;
-  document.getElementById('badge-detail-overlay').classList.remove('hidden');
-  document.getElementById('detail-body').innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500">載入中…</p>';
+
+  // Show the modal immediately with loading state
+  Modal.dialog({
+    title: '徽章詳情',
+    content: '<p class="text-sm text-gray-400 dark:text-gray-500">載入中…</p>',
+    confirmText: '關閉',
+    maxWidth: 'max-w-xl',
+  });
+
   await refreshBadgeDetail();
-};
-
-window.closeBadgeDetail = function() {
-  document.getElementById('badge-detail-overlay').classList.add('hidden');
-  detailCurrentBadgeId = null;
-};
-
-window.closeBadgeDetailOnOverlay = function(e) {
-  if (e.target === document.getElementById('badge-detail-overlay')) {
-    closeBadgeDetail();
-  }
 };
 
 async function refreshBadgeDetail() {
@@ -509,26 +492,32 @@ async function refreshBadgeDetail() {
 function renderDetailModal(data) {
   const { badge, is_manual, awarded, not_awarded } = data;
 
-  // Update header
-  document.getElementById('detail-icon').textContent = badge.icon;
-  document.getElementById('detail-name').textContent = badge.name;
-
-  const typeBadge = document.getElementById('detail-type-badge');
+  // Build header with icon + name + type badge
+  let typeBadgeClass, typeBadgeText;
   if (badge.trigger_key) {
-    typeBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400';
-    typeBadge.textContent = `觸發器：${badge.trigger_key}`;
+    typeBadgeClass = 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400';
+    typeBadgeText = `觸發器：${escHtml(badge.trigger_key)}`;
   } else if (badge.trigger_rule_id) {
-    typeBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400';
-    typeBadge.textContent = 'DSL 規則';
+    typeBadgeClass = 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400';
+    typeBadgeText = 'DSL 規則';
   } else {
-    typeBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
-    typeBadge.textContent = '手動';
+    typeBadgeClass = 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+    typeBadgeText = '手動';
   }
 
-  // Build body HTML
   let html = '';
 
+  // Header area (icon + name + type badge)
+  html += `<div class="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+    <span class="text-2xl">${escHtml(badge.icon)}</span>
+    <div class="min-w-0">
+      <h4 class="font-heading font-bold text-base text-gray-900 dark:text-gray-100 truncate">${escHtml(badge.name)}</h4>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 ${typeBadgeClass}">${typeBadgeText}</span>
+    </div>
+  </div>`;
+
   // Awarded section
+  html += `<div class="space-y-4">`;
   html += `<div>
     <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">已獲得（${awarded.length} 人）</h3>`;
   if (awarded.length === 0) {
@@ -543,7 +532,7 @@ function renderDetailModal(data) {
           <span class="text-xs text-gray-400 dark:text-gray-500 ml-2">${date}</span>
         </div>
         <button type="button"
-                onclick="revokeFromDetail('${escAttr(a.award_id)}')"
+                onclick="revokeFromDetail('${escAttr(a.award_id)}', this)"
                 class="shrink-0 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 cursor-pointer transition-colors">
           收回
         </button>
@@ -565,7 +554,7 @@ function renderDetailModal(data) {
         <span class="text-sm text-gray-700 dark:text-gray-300">${escHtml(s.student_name)}</span>`;
       if (is_manual) {
         html += `<button type="button"
-                  onclick="awardFromDetail('${escAttr(s.student_id)}')"
+                  onclick="awardFromDetail('${escAttr(s.student_id)}', this)"
                   class="shrink-0 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 cursor-pointer transition-colors">
           頒發
         </button>`;
@@ -575,8 +564,20 @@ function renderDetailModal(data) {
     html += `</ul>`;
   }
   html += `</div>`;
+  html += `</div>`;
 
-  document.getElementById('detail-body').innerHTML = html;
+  // Update the modal body in-place (modal is already open)
+  const modalBody = document.getElementById('modal-body');
+  if (modalBody) {
+    modalBody.innerHTML = html;
+  }
+
+  // Update the modal title
+  const modalTitle = document.getElementById('modal-title');
+  if (modalTitle) {
+    modalTitle.textContent = `${badge.icon} ${badge.name}`;
+    modalTitle.classList.remove('hidden');
+  }
 
   // Sync card award count badge (task 4.4)
   const card = document.querySelector(`[data-badge-id="${badge.id}"]`);
@@ -593,42 +594,60 @@ function escAttr(str) {
   return String(str).replace(/'/g,'&#39;').replace(/"/g,'&quot;');
 }
 
-window.awardFromDetail = async function(studentId) {
+window.awardFromDetail = async function(studentId, btn) {
   if (!detailCurrentBadgeId) return;
-  try {
-    const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/award`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: studentId }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      Modal.alert(err.detail || '頒發失敗');
-      return;
+  const doAward = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/award`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Toast.error(err.detail || '頒發失敗');
+        return;
+      }
+      Toast.success('已頒發徽章');
+      await refreshBadgeDetail();
+    } catch {
+      Toast.error('網路錯誤');
     }
-    await refreshBadgeDetail();
-  } catch {
-    Modal.alert('網路錯誤');
+  };
+  if (btn) {
+    await withLoading(btn, doAward);
+  } else {
+    await doAward();
   }
 };
 
-window.revokeFromDetail = async function(awardId) {
+window.revokeFromDetail = async function(awardId, btn) {
   if (!detailCurrentBadgeId) return;
-  try {
-    const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/revoke`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ award_id: awardId }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      Modal.alert(err.detail || '收回失敗');
-      return;
+  Modal.confirm('確定要撤銷此徽章？此操作無法復原。', async () => {
+    const doRevoke = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/revoke`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ award_id: awardId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          Toast.error(err.detail || '收回失敗');
+          return;
+        }
+        Toast.success('已收回徽章');
+        await refreshBadgeDetail();
+      } catch {
+        Toast.error('網路錯誤');
+      }
+    };
+    if (btn) {
+      await withLoading(btn, doRevoke);
+    } else {
+      await doRevoke();
     }
-    await refreshBadgeDetail();
-  } catch {
-    Modal.alert('網路錯誤');
-  }
+  });
 };
 
 // ── Badge Help Modal ─────────────────────────────────────────────────────────

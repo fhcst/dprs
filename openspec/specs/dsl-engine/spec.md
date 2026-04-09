@@ -36973,7 +36973,7 @@ tests:
 ---
 ### Requirement: Dual compilation targets
 
-The `dsl-engine` crate SHALL compile to two targets: WebAssembly (via `wasm-pack`) producing an npm package, and Python native binding (via `maturin` with PyO3) producing a Python wheel. Both targets SHALL expose the same API surface: `parse`, `validate`, `evaluate`, `complete`, `hover_info`, `describe`, and `get_help_content`. Both targets SHALL produce identical results for identical inputs. The Python wheel SHALL be declared as a project dependency so that `uv sync` installs it automatically. The Dockerfile SHALL include `maturin build` and wheel installation steps. If the `dsl_engine` module is not available at runtime, the `_validate_expression()` function SHALL raise a clear error message instead of an unhandled `ModuleNotFoundError`.
+The `dsl-engine` crate SHALL compile to two targets: WebAssembly (via `wasm-pack`) producing an npm package, and Python native binding (via `maturin` with PyO3) producing a Python wheel. Both targets SHALL expose the same API surface: `parse`, `validate`, `evaluate`, `complete`, `hover_info`, `describe`, and `get_help_content`. Both targets SHALL produce identical results for identical inputs. The Python wheel SHALL be declared as a project dependency so that `uv sync` installs it automatically. The Dockerfile SHALL build both targets in the builder stage: `maturin build` for the PyO3 wheel and `wasm-pack build` for the WASM bundle. The WASM bundle SHALL NOT be required to be pre-built or checked into the repository. If the `dsl_engine` module is not available at runtime, the `_validate_expression()` function SHALL raise a clear error message instead of an unhandled `ModuleNotFoundError`.
 
 #### Scenario: WASM and PyO3 produce same parse result
 
@@ -36995,62 +36995,65 @@ The `dsl-engine` crate SHALL compile to two targets: WebAssembly (via `wasm-pack
 - **WHEN** the Python environment does not have the `dsl_engine` module installed and a teacher attempts to create a trigger rule
 - **THEN** the system SHALL return a clear error message indicating the DSL engine is not available, NOT an unhandled 500 error
 
+#### Scenario: Docker build does not depend on local WASM artifacts
+
+- **WHEN** `docker build` is executed and `crates/dsl-engine/pkg/` is empty or contains only `.gitignore`
+- **THEN** the Docker build SHALL succeed because WASM is built in the builder stage, not copied from the local context
+
 <!-- @trace
-source: fix-codex-review-findings
-updated: 2026-04-03
+source: docker-wasm-build-fix
+updated: 2026-04-09
 code:
-  - .agents/workflows
-  - .agents/skills/spectra-discuss
-  - .agents/workflows/spectra-ingest.md
-  - .github/skills/spectra-ask/SKILL.md
-  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-002.md
-  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-004.md
-  - .github/prompts/spectra-debug.prompt.md
-  - .github/prompts/spectra-propose.prompt.md
-  - .github/skills/spectra-archive/SKILL.md
-  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-005.md
-  - .security-audit/active/dprs-full-review-2026-04-02/scope.md
-  - .agents/skills/spectra-propose/SKILL.md
-  - .agents/skills/spectra-ask/SKILL.md
-  - .agents/workflows/spectra-ask.md
-  - .github/skills/spectra-audit/SKILL.md
-  - .security-audit/active/dprs-full-review-2026-04-02/.audit.yaml
-  - .agents/workflows/spectra-archive.md
-  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-003.md
-  - .agents/skills/spectra-debug/SKILL.md
-  - .agents/skills/spectra-ingest
-  - .agents/workflows/spectra-apply.md
-  - .github/skills/spectra-apply/SKILL.md
-  - .github/skills/spectra-propose/SKILL.md
-  - AGENTS.md
-  - .agents/workflows/spectra-propose.md
-  - .agents/skills/spectra-archive/SKILL.md
-  - .github/skills/spectra-debug/SKILL.md
-  - .agents/skills/spectra-apply/SKILL.md
-  - .agents/skills/spectra-audit
-  - .security-audit/active/dprs-full-review-2026-04-02/tasks.md
-  - .github/prompts/spectra-archive.prompt.md
-  - .agents/skills/spectra-debug
-  - GEMINI.md
-  - .security-audit/active/dprs-full-review-2026-04-02/findings/FINDING-001.md
-  - .agents/skills/spectra-audit/SKILL.md
-  - .github/prompts/spectra-apply.prompt.md
-  - .github/skills/spectra-ingest/SKILL.md
-  - .github/prompts/spectra-ask.prompt.md
-  - .github/skills/spectra-discuss/SKILL.md
-  - .agents/skills/spectra-apply
-  - .agents/skills
-  - .agents/skills/spectra-propose
-  - .github/prompts/spectra-discuss.prompt.md
-  - .github/prompts/spectra-ingest.prompt.md
-  - .agents/skills/spectra-discuss/SKILL.md
-  - .agents/skills/spectra-archive
+  - src/templates/admin/users_list.html
+  - src/templates/teacher/badges_manage.html
+  - src/templates/teacher/class_hub.html
   - .agents/skills/spectra-ask
-  - .github/prompts/spectra-audit.prompt.md
-  - .security-audit/active/dprs-full-review-2026-04-02/plan.md
-  - .agents/workflows/spectra-debug.md
-  - .agents/skills/spectra-ingest/SKILL.md
-  - .codex/environments/environment.toml
-  - .agents/workflows/spectra-audit.md
-  - .agents/workflows/spectra-discuss.md
+  - src/main.py
+  - .agents/skills/spectra-apply
+  - .agents/skills/spectra-archive
+  - .agents/skills/spectra-discuss
+  - src/templates/teacher/template_assign.html
+  - docs/uiux-audit/20260408/01-accessibility.md
+  - docs/uiux-audit/20260408/02-navigation-information-architecture.md
+  - src/pages/router.py
+  - src/templates/student/badges.html
+  - src/templates/teacher/points_manage.html
+  - scripts/migrations/role_to_permissions.py
+  - src/templates/setup.html
+  - src/templates/shared/base.html
+  - src/templates/student/submit_task.html
+  - docs/uiux-audit/20260408/07-content-empty-states.md
+  - src/templates/login.html
+  - src/static/css/input.css
+  - src/core/users/router.py
+  - .agents/skills/spectra-audit
+  - .agents/skills/spectra-debug
+  - Dockerfile
+  - docs/uiux-audit/20260408/06-mobile-responsive-audit.md
+  - .agents/skills/spectra-ingest
+  - docs/uiux-audit/20260408/05-interaction-feedback-patterns.md
+  - docs/uiux-audit/20260408/00-index.md
+  - scripts/build-css.sh
+  - src/templates/admin/user_form.html
+  - src/templates/teacher/attendance_manage.html
+  - src/templates/teacher/templates_list.html
+  - src/templates/teacher/submission_review.html
+  - src/templates/student/learning_history.html
+  - docs/uiux-audit/20260408/03-role-workflow-analysis.md
+  - docs/uiux-audit/20260408/04-design-system-consistency.md
+  - src/templates/admin/classes_list.html
+  - src/templates/community/feed.html
+  - .agents/skills/spectra-propose
+  - docs/uiux-audit/20260408/08-recommendations-roadmap.md
+  - src/templates/community/leaderboard.html
+  - src/templates/settings.html
+  - src/templates/student/class_history.html
+  - src/templates/student/dashboard.html
+  - crates/dsl-engine/uv.lock
+  - src/templates/shared/macros.html
+tests:
+  - tests/test_dashboard_and_page_bugs.py
+  - tests/test_class_hub_page.py
+  - tests/test_admin_users.py
+  - tests/auth/test_role_migration.py
 -->

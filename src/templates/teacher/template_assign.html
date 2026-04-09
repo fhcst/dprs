@@ -62,6 +62,7 @@
         <input type="date" id="range-end"
                class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
       </div>
+      <p id="range-date-error" class="hidden text-sm text-red-600 dark:text-red-400">起始日期不可晚於結束日期</p>
     </div>
 
     {# Weekday mode: start + end date + weekday checkboxes #}
@@ -76,6 +77,7 @@
         <input type="date" id="weekday-end"
                class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
       </div>
+      <p id="weekday-date-error" class="hidden text-sm text-red-600 dark:text-red-400">起始日期不可晚於結束日期</p>
       <div>
         <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">開放星期</label>
         <div class="flex flex-wrap gap-2">
@@ -258,5 +260,38 @@ async function submitSchedule() {
     msg.textContent = data.detail || '排程失敗，請稍後再試';
   }
 }
+
+/* ── Cross-field date range validation ── */
+const DATE_NORMAL = 'border-gray-300 dark:border-gray-700';
+const DATE_ERROR  = 'border-red-500 dark:border-red-500';
+
+function validateDateRange(startEl, endEl, errorEl) {
+  const s = startEl.value;
+  const e = endEl.value;
+  const invalid = s && e && s > e;
+
+  errorEl.classList.toggle('hidden', !invalid);
+
+  [startEl, endEl].forEach(el => {
+    if (invalid) {
+      el.classList.remove('border-gray-300', 'dark:border-gray-700');
+      el.classList.add('border-red-500', 'dark:border-red-500');
+    } else {
+      el.classList.remove('border-red-500', 'dark:border-red-500');
+      el.classList.add('border-gray-300', 'dark:border-gray-700');
+    }
+  });
+}
+
+[
+  ['range-start',   'range-end',   'range-date-error'],
+  ['weekday-start', 'weekday-end', 'weekday-date-error'],
+].forEach(([startId, endId, errId]) => {
+  const startEl = document.getElementById(startId);
+  const endEl   = document.getElementById(endId);
+  const errEl   = document.getElementById(errId);
+  startEl.addEventListener('change', () => validateDateRange(startEl, endEl, errEl));
+  endEl.addEventListener('change',   () => validateDateRange(startEl, endEl, errEl));
+});
 </script>
 {% endblock %}

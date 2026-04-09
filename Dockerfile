@@ -1,4 +1,4 @@
-# ── Stage 1: Build DSL engine wheel (Rust → PyO3) ────────────────────────────
+# ── Stage 1: Build DSL engine (PyO3 wheel + WASM bundle) ─────────────────────
 FROM python:3.13-slim-trixie AS dsl-builder
 
 RUN apt-get update \
@@ -7,14 +7,31 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN pip install maturin
+# Install build tools and WASM target
+RUN pip install maturin \
+    && rustup target add wasm32-unknown-unknown \
+    && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 WORKDIR /build
 COPY ./crates/dsl-engine ./crates/dsl-engine
+
+# Build PyO3 wheel for server-side DSL evaluation
 RUN cd crates/dsl-engine \
     && maturin build --features python --release --out /wheels
 
-# ── Stage 2: Runtime image (slim, no Rust) ────────────────────────────────────
+# Build WASM bundle for frontend DSL validation
+RUN cd crates/dsl-engine \
+    && wasm-pack build --target web --out-dir /wasm-pkg --release
+
+# ── Stage 2: Download Tailwind CSS standalone CLI ─────────────────────────────
+FROM alpine AS tailwind
+ARG TARGETARCH
+RUN apk add --no-cache curl && \
+    case "$TARGETARCH" in amd64) ARCH=x64 ;; arm64) ARCH=arm64 ;; esac && \
+    curl -fsSL "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-${ARCH}" -o /tailwindcss && \
+    chmod +x /tailwindcss
+
+# ── Stage 3: Runtime image (slim, no Rust) ────────────────────────────────────
 FROM python:3.13-slim-trixie
 
 # Only git needed (for fastapi-webpage git source)
@@ -38,8 +55,15 @@ RUN uv sync --frozen --no-cache
 COPY --from=dsl-builder /wheels/*.whl /tmp/wheels/
 RUN uv pip install /tmp/wheels/*.whl && rm -rf /tmp/wheels
 
-# WASM bundle for frontend DSL editor (pre-built, checked into repo)
-COPY ./crates/dsl-engine/pkg ./crates/dsl-engine/pkg
+# ── Build Tailwind CSS ──────────────────────────────────────────────────────
+COPY --from=tailwind /tailwindcss /tmp/tailwindcss
+COPY ./src/static/css/input.css ./src/static/css/input.css
+COPY ./src/templates ./src/templates
+RUN /tmp/tailwindcss --input ./src/static/css/input.css --output ./src/static/css/tailwind.css --minify && \
+    rm /tmp/tailwindcss
+
+# WASM bundle for frontend DSL editor (built in dsl-builder stage)
+COPY --from=dsl-builder /wasm-pkg ./crates/dsl-engine/pkg
 
 COPY ./src ./src
 COPY ./scripts ./scripts

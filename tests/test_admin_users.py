@@ -417,3 +417,37 @@ async def test_csv_import_rejects_file_over_1mb(db, app):
             files={"file": ("big.csv", oversized_data, "text/csv")},
         )
     assert resp.status_code == 413
+
+
+# ── GET /admin/users/check-username ────────────────────────────────────────
+
+async def test_check_username_available(db, app):
+    """GET /admin/users/check-username must return available=true for unused names."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get("/admin/users/check-username", params={"username": "nonexistent"})
+    assert resp.status_code == 200
+    assert resp.json()["available"] is True
+
+
+async def test_check_username_taken(db, app):
+    """GET /admin/users/check-username must return available=false for existing names."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN), username="admin")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get("/admin/users/check-username", params={"username": "admin"})
+    assert resp.status_code == 200
+    assert resp.json()["available"] is False
+
+
+async def test_check_username_requires_manage_users(db, app):
+    """GET /admin/users/check-username must return 403 without MANAGE_USERS."""
+    from core.auth.permissions import STUDENT
+    _, token = await _make_user(int(STUDENT), username="student")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get("/admin/users/check-username", params={"username": "anyone"})
+    assert resp.status_code == 403

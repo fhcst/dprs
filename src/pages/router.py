@@ -77,7 +77,7 @@ async def dashboard_page(
     current_user: User = Depends(get_page_user),
     create_class: int = 0,
 ):
-    from datetime import date, datetime, timezone
+    from datetime import date, datetime, timedelta, timezone
 
     from core.classes.models import Class, ClassMembership
     from tasks.checkin.models import CheckinRecord
@@ -159,6 +159,23 @@ async def dashboard_page(
     from gamification.points.service import get_balance
     from tasks.submissions.models import TaskSubmission
 
+    # ── Teacher pending counts (across all managed classes) ──
+    class_ids = [m.class_id for m in memberships]
+    pending_submission_count = 0
+    pending_join_request_count = 0
+    if page_ctx["can_manage_class"] or page_ctx["can_manage_tasks"]:
+        if class_ids:
+            from beanie.operators import In
+            from core.classes.models import JoinRequest
+            pending_submission_count = await TaskSubmission.find(
+                In(TaskSubmission.class_id, class_ids),
+                TaskSubmission.status == "pending",
+            ).count()
+            pending_join_request_count = await JoinRequest.find(
+                In(JoinRequest.class_id, class_ids),
+                JoinRequest.status == "pending",
+            ).count()
+
     user_id = str(current_user.id)
     total_points = await get_balance(user_id)
     badge_count = await active_awards_query(BadgeAward.student_id == user_id).count()
@@ -186,6 +203,15 @@ async def dashboard_page(
     activities.sort(key=lambda x: x["timestamp"], reverse=True)
     recent_activities = activities[:20]
 
+    # ── First-login detection ──
+    is_first_login = False
+    if not memberships and submission_count == 0 and current_user.created_at:
+        created = current_user.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if (now - created) < timedelta(hours=24):
+            is_first_login = True
+
     return {
         **page_ctx,
         "classes": classes,
@@ -198,6 +224,9 @@ async def dashboard_page(
         "badges": badges,
         "recent_activities": recent_activities,
         "open_create_class_modal": bool(create_class),
+        "pending_submission_count": pending_submission_count,
+        "pending_join_request_count": pending_join_request_count,
+        "is_first_login": is_first_login,
     }
 
 

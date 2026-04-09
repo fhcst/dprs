@@ -137,6 +137,10 @@ _dsl_pkg = _Path(__file__).resolve().parent.parent / "crates" / "dsl-engine" / "
 if _dsl_pkg.is_dir():
     app.mount("/static/dsl-engine", _StaticFiles(directory=str(_dsl_pkg)), name="dsl-engine-static")
 
+_static_dir = _Path(__file__).resolve().parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", _StaticFiles(directory=str(_static_dir)), name="static")
+
 app.include_router(system_router)
 app.include_router(auth_router)
 app.include_router(pages_router)

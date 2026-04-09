@@ -119,6 +119,12 @@ openspec/.vector-search.db*
 # --- Rust build artifacts (keep pkg/ — pre-built WASM bundle for frontend) ---
 crates/*/target/
 
+# --- Tailwind Standalone CLI binary ---
+tools/tailwindcss
+
+# --- Tailwind CSS build output ---
+src/static/css/tailwind.css
+
 # --- AI Agent local settings ---
 .claude/settings.local.json
 .superpowers
