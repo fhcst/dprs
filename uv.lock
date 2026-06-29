@@ -275,7 +275,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "fakeredis", specifier = ">=2.0.0" },
     { name = "fastapi", extras = ["standard"] },
-    { name = "fastapi-webpage", git = "https://github.com/cxphoenix/fastapi-webpage.git" },
+    { name = "fastapi-webpage", git = "https://github.com/cxphoenix/fastapi-webpage.git?tag=v0.3.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "maturin", specifier = ">=1.5" },
     { name = "mongomock-motor", specifier = ">=0.0.35" },
@@ -384,12 +384,13 @@ wheels = [
 
 [[package]]
 name = "fastapi-webpage"
-version = "0.2.1"
-source = { git = "https://github.com/cxphoenix/fastapi-webpage.git#09d434f9324c8a8c1b21696f57d312f45d8a2d33" }
+version = "0.3.1"
+source = { git = "https://github.com/cxphoenix/fastapi-webpage.git?tag=v0.3.1#49145d18a81c4247698a29b10104ff8bdf7fcd05" }
 dependencies = [
     { name = "fastapi" },
     { name = "jinja2" },
     { name = "python-multipart" },
+    { name = "starlette" },
     { name = "ujson" },
 ]
 
