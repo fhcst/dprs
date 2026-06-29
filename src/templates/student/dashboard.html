@@ -465,17 +465,26 @@
       onConfirm: async function() {
         const name = document.getElementById('new-class-name').value.trim();
         const desc = document.getElementById('new-class-desc').value.trim();
-        if (!name) { document.getElementById('new-class-name').focus(); return; }
-        const resp = await fetch('/classes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description: desc, visibility: 'public' }),
-        });
-        if (resp.status === 201) {
-          location.reload();
-        } else {
-          const errBox = document.getElementById('create-class-error');
+        const errBox = document.getElementById('create-class-error');
+        if (errBox) errBox.classList.add('hidden');
+        // Empty name: keep the dialog open (return false) and refocus the field.
+        if (!name) { document.getElementById('new-class-name').focus(); return false; }
+        try {
+          const resp = await fetch('/classes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description: desc, visibility: 'public' }),
+          });
+          if (resp.status === 201) {
+            location.reload();
+            return;  // success — page reloads; dialog teardown is moot
+          }
+          // Server error: surface an in-modal message and keep the dialog open.
           if (errBox) { errBox.textContent = '建立失敗，請稍後再試'; errBox.classList.remove('hidden'); }
+          return false;
+        } catch (e) {
+          if (errBox) { errBox.textContent = '網路錯誤，請稍後再試'; errBox.classList.remove('hidden'); }
+          return false;
         }
       }
     });
@@ -502,7 +511,8 @@
       cancelText: "取消",
       onConfirm: async function() {
         const code = document.getElementById('join-invite-code').value.trim();
-        if (!code) { document.getElementById('join-invite-code').focus(); return; }
+        // Empty code: keep the dialog open (return false) and refocus the field.
+        if (!code) { document.getElementById('join-invite-code').focus(); return false; }
         const msgEl = document.getElementById('join-class-msg');
         try {
           const resp = await fetch('/classes/join-request', {
@@ -525,6 +535,8 @@
           msgEl.className = 'text-sm mt-2 text-red-600 dark:text-red-400';
           msgEl.classList.remove('hidden');
         }
+        // Join always keeps the dialog open so the in-modal message stays visible.
+        return false;
       }
     });
   }

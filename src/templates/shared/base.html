@@ -671,7 +671,9 @@
    Usage:
      Modal.confirm("message", onConfirm, onCancel)
      Modal.alert("message", onClose)
-     Modal.dialog({ title, content, onClose, onConfirm, confirmText, cancelText })
+     Modal.dialog({ title, content, id, onConfirm, onClose, confirmText, cancelText, maxWidth })
+       - onConfirm may return false / Modal.KEEP_OPEN (or throw) to keep the dialog open
+       - id enables Modal.topId() stacking-safety checks for async #modal-body mutations
    ═══════════════════════════════════════════════════════════════════════════ #}
 <style>
   @media (max-width: 640px) {
@@ -710,13 +712,50 @@
   var bodyEl = document.getElementById('modal-body');
   var confirmBtn = document.getElementById('modal-confirm-btn');
   var cancelBtn = document.getElementById('modal-cancel-btn');
-  var _trigger = null;
+  var _trigger = null;        // element to refocus once the LAST modal closes
   var _savedOverflow = '';
-  var _escHandler = null;
+  var _current = null;        // opts of the modal currently on top
+  var _stack = [];            // snapshots of modals layered underneath the top one
+  var _busy = false;          // true while an async dialog onConfirm is in flight
+  var _suppressClick = false; // briefly ignore clicks right after restoring an underlying modal
 
   var FOCUSABLE = 'a[href],button:not([disabled]),textarea,input:not([type="hidden"]),select,[tabindex]:not([tabindex="-1"])';
+  // All max-width utilities a modal may carry — cleared before applying a new one
+  // so a wide modal (e.g. badge detail max-w-xl) never leaks into a narrow confirm.
+  var MAXW = ['max-w-xs', 'max-w-sm', 'max-w-md', 'max-w-lg', 'max-w-xl', 'max-w-2xl', 'max-w-3xl'];
+
+  // Explicit, self-documenting sentinel a dialog onConfirm may return to keep the
+  // dialog open. Returning `false` is also still honoured (back-compat), but
+  // Modal.KEEP_OPEN avoids the "bare `return;` accidentally closes the dialog"
+  // foot-gun for future callers. Keep-open is matched STRUCTURALLY on the truthy
+  // `__modalKeepOpen` property (see _onConfirm), so returning a reconstructed
+  // { __modalKeepOpen: true } literal works identically to this singleton — the
+  // contract is the shape, not reference identity.
+  var KEEP_OPEN = { __modalKeepOpen: true };
+  // Escape hatch for a hung dialog onConfirm (e.g. a stalled fetch that never
+  // settles): after this delay the busy lock is released so Cancel/Esc/click-away
+  // work again instead of trapping the user in an undismissable modal.
+  var DIALOG_BUSY_TIMEOUT_MS = 15000;
+  // After a message-type confirm/alert restores an UNDERLYING modal in the same
+  // click turn, ignore any click that lands within this window — it is almost
+  // certainly the second half of an impatient double-click and would otherwise act
+  // on the just-restored modal (e.g. close the badge-detail dialog a revoke must
+  // keep open). Sized to cover a typical OS double-click interval.
+  var RESTORE_CLICK_GUARD_MS = 350;
+
+  function _isDialog(opts) {
+    // Only Modal.dialog (form-type) opts carry the explicit `_isForm` marker and
+    // opt into the new lifecycle: onConfirm runs BEFORE teardown (so it can read
+    // the injected body fields) and its resolved value controls close timing.
+    // Message-type confirm/alert/alertHtml keep the legacy close-then-callback
+    // semantics — alertHtml also injects `html`, so dialog-ness must NOT be inferred
+    // from body presence, and a content-less dialog must NOT silently fall back to
+    // the broken callback-after-teardown path either. Discriminate on the marker.
+    return !!(opts && opts._isForm);
+  }
 
   function _trapFocus(e) {
+    if (overlay.classList.contains('hidden')) return;
     var focusable = panel.querySelectorAll(FOCUSABLE);
     if (!focusable.length) return;
     var first = focusable[0], last = focusable[focusable.length - 1];
@@ -726,11 +765,9 @@
     }
   }
 
-  function _show(opts) {
-    // opts: { title, message, html, onConfirm, onCancel, showCancel, role, confirmText, cancelText, maxWidth }
-    _trigger = document.activeElement;
-    var role = opts.role || 'dialog';
-    panel.setAttribute('role', role);
+  // Paint the panel from an opts object (used when opening a modal).
+  function _render(opts) {
+    panel.setAttribute('role', opts.role || 'dialog');
     panel.setAttribute('aria-modal', 'true');
 
     if (opts.title) {
@@ -738,61 +775,223 @@
       titleEl.classList.remove('hidden');
       panel.setAttribute('aria-labelledby', 'modal-title');
     } else {
+      titleEl.textContent = '';
       titleEl.classList.add('hidden');
       panel.removeAttribute('aria-labelledby');
     }
 
-    if (opts.html) { bodyEl.innerHTML = opts.html; }
+    if (opts.html != null) { bodyEl.innerHTML = opts.html; }
     else { bodyEl.textContent = opts.message || ''; }
 
     confirmBtn.textContent = opts.confirmText || '確認';
+    confirmBtn.disabled = false;
     cancelBtn.textContent = opts.cancelText || '取消';
+    cancelBtn.disabled = false;
     cancelBtn.classList.toggle('hidden', !opts.showCancel);
 
-    panel.classList.remove('max-w-sm', 'max-w-2xl');
+    MAXW.forEach(function (c) { panel.classList.remove(c); });
     panel.classList.add(opts.maxWidth || 'max-w-sm');
+  }
 
-    function close(callback) {
+  // Capture the LIVE state of the top modal so it can be restored after a modal
+  // opened on top of it closes. We snapshot the live body (not opts.html) because
+  // callers such as badge detail rewrite #modal-body after open.
+  //
+  // LIMITATION: the body is serialized to an HTML string (bodyEl.innerHTML), so it
+  // captures neither live <input>/<textarea>/<select> .value (only their attributes)
+  // nor handlers bound via addEventListener. Only stack a modal OVER a dialog whose
+  // body is inert markup + inline on* handlers (e.g. the badge-detail lists). Do NOT
+  // stack over a form dialog with live inputs / JS-bound listeners — the create/join-
+  // class dialogs never get a modal opened on top of them, so this is safe today.
+  function _snapshot() {
+    return {
+      titleText: titleEl.textContent,
+      titleHidden: titleEl.classList.contains('hidden'),
+      bodyHtml: bodyEl.innerHTML,
+      confirmText: confirmBtn.textContent,
+      cancelText: cancelBtn.textContent,
+      cancelHidden: cancelBtn.classList.contains('hidden'),
+      role: panel.getAttribute('role'),
+      maxw: MAXW.filter(function (c) { return panel.classList.contains(c); }),
+      trigger: _trigger,
+      opts: _current,
+    };
+  }
+
+  function _restore(s) {
+    titleEl.textContent = s.titleText;
+    titleEl.classList.toggle('hidden', s.titleHidden);
+    if (s.titleHidden) panel.removeAttribute('aria-labelledby');
+    else panel.setAttribute('aria-labelledby', 'modal-title');
+    bodyEl.innerHTML = s.bodyHtml;
+    confirmBtn.textContent = s.confirmText;
+    confirmBtn.disabled = false;
+    cancelBtn.textContent = s.cancelText;
+    cancelBtn.disabled = false;
+    cancelBtn.classList.toggle('hidden', s.cancelHidden);
+    panel.setAttribute('role', s.role || 'dialog');
+    MAXW.forEach(function (c) { panel.classList.remove(c); });
+    (s.maxw && s.maxw.length ? s.maxw : ['max-w-sm']).forEach(function (c) { panel.classList.add(c); });
+    _trigger = s.trigger;
+    _current = s.opts;
+    _busy = false;
+  }
+
+  // Remove the top modal: restore the layer beneath it if any, otherwise hide.
+  function _popOrHide() {
+    if (_stack.length) {
+      var s = _stack.pop();
+      _restore(s);
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+      var f = panel.querySelector(FOCUSABLE);
+      if (f) f.focus();
+    } else {
       overlay.classList.add('hidden');
       overlay.setAttribute('aria-hidden', 'true');
       document.body.style.overflow = _savedOverflow;
-      document.removeEventListener('keydown', _escHandler);
-      panel.removeEventListener('keydown', _trapFocus);
-      confirmBtn.onclick = null;
-      cancelBtn.onclick = null;
       titleEl.textContent = '';
       titleEl.classList.add('hidden');
       bodyEl.innerHTML = '';
+      _current = null;
+      _busy = false;
       if (_trigger && _trigger.focus) _trigger.focus();
-      if (callback) callback();
+    }
+  }
+
+  function _onConfirm() {
+    var opts = _current;
+    if (!opts) return;
+
+    if (!_isDialog(opts)) {
+      // Message-type confirm/alert keep the legacy order: close first, THEN run
+      // the callback. This is what lets `confirm → (open a follow-up alert)` flows
+      // work — the confirm is already gone before the alert is shown.
+      var cb = opts.onConfirm;
+      var restoring = _stack.length > 0;
+      _popOrHide();
+      if (restoring) {
+        // _popOrHide just restored an UNDERLYING modal in this same click turn.
+        // Arm a short guard so an immediately-following click (the 2nd half of a
+        // double-click) does not act on the just-restored modal's confirm/cancel
+        // button — e.g. closing the badge-detail dialog the revoke must keep open.
+        _suppressClick = true;
+        setTimeout(function () { _suppressClick = false; }, RESTORE_CLICK_GUARD_MS);
+      }
+      if (cb) cb();
+      return;
     }
 
-    confirmBtn.onclick = function () { close(opts.onConfirm); };
-    cancelBtn.onclick = function () { close(opts.onCancel); };
+    // Dialog (form) modals: run onConfirm while the body — and the fields/error
+    // nodes it contains — are still in the DOM. Close timing is decided by the
+    // resolved value: `false`, any object with a truthy `__modalKeepOpen` (the
+    // Modal.KEEP_OPEN sentinel OR a shape-equivalent literal), or throw/reject keep
+    // the dialog open with its body preserved; anything else closes and clears it.
+    _busy = true;
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    var settled = false;
+    // Escape hatch: if onConfirm never settles (stalled network), release the busy
+    // lock after a timeout and re-enable Cancel so Esc/overlay/Cancel dismiss the
+    // modal. Confirm stays disabled to avoid double-submitting the in-flight call.
+    var watchdog = setTimeout(function () {
+      if (settled || _current !== opts) return;
+      _busy = false;
+      cancelBtn.disabled = false;
+    }, DIALOG_BUSY_TIMEOUT_MS);
+    Promise.resolve()
+      .then(function () { return opts.onConfirm ? opts.onConfirm() : undefined; })
+      .then(function (result) {
+        settled = true;
+        clearTimeout(watchdog);
+        // If the user already dismissed this dialog (or it was superseded by another
+        // modal) while the request was in flight, do nothing — acting now would tear
+        // down or paint over a different modal.
+        if (_current !== opts) return;
+        _busy = false;
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+        // Keep-open is detected STRUCTURALLY (any truthy `__modalKeepOpen`), not by
+        // reference equality with the KEEP_OPEN singleton — so a caller who reads the
+        // documented shape and returns their OWN { __modalKeepOpen: true } literal
+        // still keeps the dialog open instead of silently closing. `false` also keeps
+        // it open (back-compat); anything else (incl. a bare `return;`) closes.
+        if (result !== false && !(result && result.__modalKeepOpen)) { _popOrHide(); }
+      })
+      .catch(function (err) {
+        settled = true;
+        clearTimeout(watchdog);
+        // Keep the dialog open and swallow the error so it never surfaces as an
+        // unhandled promise rejection in the console.
+        if (window.console && console.error) console.error('Modal dialog onConfirm error:', err);
+        if (_current !== opts) return;
+        _busy = false;
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+      });
+  }
 
-    overlay.onclick = function (e) {
-      if (e.target === overlay || e.target === overlay.querySelector('.modal-overlay-inner')) {
-        close(opts.onCancel);
-      }
-    };
+  function _onCancel() {
+    var opts = _current;
+    if (!opts) return;
+    var cb = opts.onCancel;
+    _popOrHide();
+    if (cb) cb();
+  }
 
-    _escHandler = function (e) {
-      if (e.key === 'Escape') { close(opts.onCancel); }
-    };
+  // Bind the permanent handlers once; they always act on the current top modal.
+  confirmBtn.onclick = function () { if (_suppressClick || _busy) return; _onConfirm(); };
+  cancelBtn.onclick = function () { if (_suppressClick || _busy) return; _onCancel(); };
+  overlay.onclick = function (e) {
+    if (_busy) return;
+    if (e.target === overlay || e.target === overlay.querySelector('.modal-overlay-inner')) {
+      _onCancel();
+    }
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (overlay.classList.contains('hidden') || _busy) return;
+    _onCancel();
+  });
+  panel.addEventListener('keydown', _trapFocus);
 
-    _savedOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+  function _show(opts) {
+    // opts: { title, message, html, onConfirm, onCancel, showCancel, role, confirmText, cancelText, maxWidth }
+    if (overlay.classList.contains('hidden')) {
+      // First modal in a (possibly nested) sequence: lock scroll and remember the
+      // element to refocus once everything closes.
+      _savedOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      _trigger = document.activeElement;
+    } else {
+      // A modal is already open — push it so it can be restored later instead of
+      // being overwritten (single overlay is shared by every modal).
+      _stack.push(_snapshot());
+    }
+
+    _current = opts;
+    _busy = false;
+    // Clear any lingering post-restore double-click guard: it was armed to protect a
+    // specific just-restored modal (scoped only by wall-clock RESTORE_CLICK_GUARD_MS),
+    // and must not survive into this freshly-opened, unrelated modal and swallow its
+    // first confirm/cancel click.
+    _suppressClick = false;
+    _render(opts);
 
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
-    document.addEventListener('keydown', _escHandler);
-    panel.addEventListener('keydown', _trapFocus);
 
     var firstFocusable = panel.querySelector(FOCUSABLE);
     if (firstFocusable) firstFocusable.focus();
   }
 
   window.Modal = {
+    // Sentinel a dialog onConfirm can return to stay open (alongside legacy `false`).
+    KEEP_OPEN: KEEP_OPEN,
+    // Identity of the modal currently on top (its opts.id, or null). Lets callers
+    // that mutate #modal-body asynchronously confirm THEIR dialog is still the top
+    // modal before writing, so they never clobber a stacked confirm/alert.
+    topId: function () { return _current ? (_current.id || null) : null; },
     confirm: function (msg, onConfirm, onCancel) {
       _show({ message: msg, onConfirm: onConfirm, onCancel: onCancel, showCancel: true, role: 'alertdialog' });
     },
@@ -804,6 +1003,8 @@
     },
     dialog: function (opts) {
       _show({
+        _isForm: true,        // opt into the form-dialog lifecycle (see _isDialog)
+        id: opts.id,          // optional identity, queryable via Modal.topId()
         title: opts.title,
         html: opts.content,
         onConfirm: opts.onConfirm,
