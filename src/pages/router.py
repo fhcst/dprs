@@ -1,5 +1,6 @@
 """Pages router — login, logout redirect, dashboard, and admin panel."""
 import os
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -25,6 +26,43 @@ def _is_production() -> bool:
     return os.getenv("FASTAPI_APP_ENVIRONMENT", "development") == "production"
 
 
+def _is_safe_next(next_value: str | None) -> bool:
+    """Return True only for a single same-origin relative-path `next` (fail-closed).
+
+    Two-stage validation that closes open-redirect bypasses:
+
+    1. Reject outright any value whose **path/authority portion** (everything before
+       the first ``?`` or ``#``) contains a backslash (``\\``), begins with ``//``, or
+       contains a colon (``:``); reject any value containing an ASCII control character.
+    2. Require a single leading ``/`` and, via ``urlsplit``, an empty ``scheme`` and
+       ``netloc``.
+
+    Stage 1's authority checks deliberately ignore the query/fragment: a colon (or
+    other reserved char) in a query value — ISO timestamps, ``?from=10:30``, ratios —
+    is harmless data that stays on our own origin, so it must round-trip rather than be
+    silently dropped. Only the path/authority portion can carry an off-origin vector.
+
+    Stage 1 is still mandatory: an empty ``urlsplit(next).netloc`` is NOT sufficient on
+    its own, because e.g. ``/\\evil.com`` yields an empty netloc yet a browser normalises
+    ``\\`` to ``/`` into a protocol-relative (off-origin) redirect.
+    """
+    if not next_value:
+        return False
+    # Stage 1 — reject dangerous vectors before trusting the parse. Apply the
+    # authority checks only to the path portion so legitimate query strings that
+    # contain ':'/'\\'/'//' (e.g. ?ts=2026-06-28T12:00:00) still round-trip.
+    path_part = next_value.split("?", 1)[0].split("#", 1)[0]
+    if "\\" in path_part or path_part.startswith("//") or ":" in path_part:
+        return False
+    if any(ord(ch) < 0x20 for ch in next_value):
+        return False
+    # Stage 2 — require a single same-origin relative path.
+    if not next_value.startswith("/"):
+        return False
+    split = urlsplit(next_value)
+    return not split.scheme and not split.netloc
+
+
 @router.get("/login", name="login_page")
 @webpage.page("login.html")
 async def login_page(request: Request, error: str | None = None, next: str | None = None):
@@ -44,10 +82,8 @@ async def login_form(
     from extensions.registry import registry
     from core.auth.jwt import create_access_token
 
-    # Validate next URL to prevent open redirect (must be a relative path)
-    safe_next = None
-    if next and next.startswith("/") and not next.startswith("//"):
-        safe_next = next
+    # Validate next URL to prevent open redirect (single same-origin relative path only)
+    safe_next = next if _is_safe_next(next) else None
 
     try:
         provider: AuthProvider = registry.get(AuthProvider, "local")
