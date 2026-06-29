@@ -35,6 +35,11 @@
   - 兩層防護同時失效的機率極低
 - **注意事項**：若未來變更 cookie 的 `SameSite` 設定或 CORS 政策，需重新評估此決策。
 
+### SEC-DESIGN-002：`empty_state` macro 的 `icon` 採 `| safe`（僅限靜態 SVG 例外）
+
+- **位置**：`src/templates/shared/macros.html` — `empty_state` macro 的 `icon` 輸出
+- **決策**：`icon` 以 `{{ icon | safe }}` 原樣渲染（繞過 autoescape），**僅限**全部 6 個呼叫端傳入的模板內寫死靜態 SVG 字面值；`title`/`description`/`cta_text`/`cta_href` 維持 autoescape、不套 `| safe`。此為專案唯一一處 `| safe`，與 SEC-WATCH-001（永遠不要對使用者輸入用 `| safe`）並存且不衝突——本例不接受任何使用者輸入；嚴禁將此模式推廣至使用者可控資料。
+
 ---
 
 ## 潛在風險（需持續監控）

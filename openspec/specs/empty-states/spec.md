@@ -10,6 +10,27 @@ TBD - created by archiving change 'uiux-audit-remediation'. Update Purpose after
 
 The system SHALL provide a Jinja2 macro for rendering empty states. The macro SHALL accept parameters for icon (SVG markup), title, description, and optional CTA button (text + href). All pages that can display an empty list SHALL use this macro.
 
+The macro SHALL render the `icon` argument as raw, un-escaped HTML so that SVG markup is displayed as a vector image and NOT as escaped source text. Because the rendering environment has Jinja2 autoescape enabled, the macro MUST apply the `| safe` filter to the `icon` argument to bypass escaping.
+
+The `icon` argument MUST be restricted to trusted, static markup (such as an SVG string literal hard-coded in a template). Callers MUST NOT pass user-controlled or otherwise untrusted data as `icon`, because raw rendering of untrusted input would cause cross-site scripting (XSS). The macro SHALL document this restriction in an inline comment.
+
+All other text parameters (`title`, `description`, `cta_text`, `cta_href`) SHALL remain HTML-escaped by autoescape and MUST NOT use the `| safe` filter.
+
+#### Scenario: Icon SVG markup renders as a vector image
+
+- **WHEN** a caller invokes the macro with `icon` set to a static SVG string literal and the page is rendered
+- **THEN** the rendered HTML SHALL contain the SVG element as live markup and SHALL NOT contain escaped `&lt;svg&gt;` source text
+
+#### Scenario: Icon argument is trusted static markup only
+
+- **WHEN** any of the macro's callers supplies the `icon` argument
+- **THEN** the supplied value SHALL be a hard-coded static SVG literal defined in the template and SHALL NOT be user-controlled input
+
+#### Scenario: Non-icon text parameters stay escaped
+
+- **WHEN** the macro renders `title`, `description`, `cta_text`, or `cta_href`
+- **THEN** those values SHALL be HTML-escaped by autoescape and SHALL NOT be passed through the `| safe` filter
+
 #### Scenario: Dashboard renders with no classes (student)
 
 - **WHEN** a student with no class memberships views the dashboard
@@ -27,51 +48,11 @@ The system SHALL provide a Jinja2 macro for rendering empty states. The macro SH
 
 
 <!-- @trace
-source: uiux-audit-remediation
-updated: 2026-04-09
+source: fix-empty-state-icon
+updated: 2026-06-29
 code:
-  - src/templates/student/badges.html
   - src/templates/shared/macros.html
-  - src/templates/teacher/attendance_manage.html
-  - src/templates/teacher/badges_manage.html
-  - src/templates/login.html
-  - src/templates/student/class_history.html
-  - src/templates/teacher/submission_review.html
-  - src/templates/community/feed.html
-  - scripts/build-css.sh
-  - src/templates/admin/user_form.html
-  - src/templates/teacher/template_assign.html
-  - docs/uiux-audit/20260408/01-accessibility.md
-  - docs/uiux-audit/20260408/04-design-system-consistency.md
-  - src/templates/admin/classes_list.html
-  - src/templates/teacher/templates_list.html
-  - src/templates/settings.html
-  - src/templates/student/submit_task.html
-  - docs/uiux-audit/20260408/07-content-empty-states.md
-  - src/templates/shared/base.html
-  - src/templates/teacher/points_manage.html
-  - src/pages/router.py
-  - docs/uiux-audit/20260408/08-recommendations-roadmap.md
-  - docs/uiux-audit/20260408/02-navigation-information-architecture.md
-  - Dockerfile
-  - docs/uiux-audit/20260408/05-interaction-feedback-patterns.md
-  - src/main.py
-  - docs/uiux-audit/20260408/00-index.md
-  - docs/uiux-audit/20260408/03-role-workflow-analysis.md
-  - src/static/css/input.css
-  - src/templates/admin/users_list.html
-  - src/templates/setup.html
-  - docs/uiux-audit/20260408/06-mobile-responsive-audit.md
-  - src/core/users/router.py
-  - src/templates/student/dashboard.html
-  - src/templates/student/learning_history.html
-  - src/templates/teacher/class_hub.html
-  - src/templates/community/leaderboard.html
-  - src/static/css/tailwind.css
-tests:
-  - tests/test_admin_users.py
-  - tests/test_class_hub_page.py
-  - tests/test_dashboard_and_page_bugs.py
+  - docs/security-notes.md
 -->
 
 ---

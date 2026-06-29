@@ -12,12 +12,21 @@
          cta_text='Create Item',
          cta_href='/items/new'
      ) }}
+
+   SECURITY CONTRACT — `icon` is rendered as raw HTML (the `safe` filter):
+     - `icon` MUST be trusted, static markup ONLY (e.g. an SVG string literal
+       hard-coded in a template). It bypasses Jinja2 autoescape.
+     - NEVER pass user-controlled / untrusted data as `icon` — doing so causes
+       XSS. (See docs/security-notes.md, SEC-DESIGN-002.)
+     - `title` / `description` / `cta_text` / `cta_href` are intentionally NOT
+       marked safe; they stay HTML-escaped by autoescape.
    ──────────────────────────────────────────────────────────────────────── #}
 {% macro empty_state(icon='', title='', description='', cta_text='', cta_href='') %}
 <div class="bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
   {% if icon %}
   <div class="flex justify-center mb-3 text-gray-300 dark:text-gray-600">
-    {{ icon }}
+    {# safe filter: icon is trusted static SVG markup only — never user input (see macro header / SEC-DESIGN-002). #}
+    {{ icon | safe }}
   </div>
   {% endif %}
   {% if title %}
