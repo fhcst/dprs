@@ -1,22 +1,61 @@
+# ==============================================================================
+# Daily Practice Report System (DPRS) — Docker Compose
+# ==============================================================================
+# 預設執行路徑：`docker compose up` 直接 pull GHCR 預建映像（image），
+# 換機部署免在每台機器重編 Rust/WASM。
+#
+# 常用 profile：
+#   （無 profile）          預設，pull ghcr.io/fhcst/dprs:${APP_IMAGE_TAG:-latest}
+#   --profile build         本機建置（opt-in），產出與 GHCR 同名同 tag 的映像
+#   --profile tunnel        以 Cloudflare Tunnel 作為唯一對外入口（不曝露 host 8000）
+#   --profile backup        常駐排程備份（選配；主力為 scripts/backup.sh）
+#   --profile debug         Mongo Express Web UI
+#
+# Bootstrapping 注意：在首個映像 publish 至 GHCR 之前，`docker compose up`
+# 無法 pull。首次使用者須先執行 `docker compose --profile build build` 產生
+# 本機映像（同 tag），之後 `docker compose up` 才能直接啟動。
+#
+# 本機 dev 直連：用 docker-compose.dev.yml（不會被自動合併）以顯式 -f 疊加：
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# 它會重新 publish 127.0.0.1:8000、掛載 ./src 供 hot-reload、覆寫 FASTAPI_APP_ENVIRONMENT=dev。
+# 因該檔不自動合併，正式機 `docker compose --profile tunnel up` 完全不受影響、
+# 保證不曝露任何 host port（無需也不可依賴自動合併的 override）。
+# ==============================================================================
+
+# ── 共用 app 設定（YAML anchor）─────────────────────────────────────────────
+# app 與 app-build 共用同一份 env / depends_on / restart，避免重複維護。
+x-app-base: &app-base
+  restart: unless-stopped
+  environment:
+    - FASTAPI_APP_ENVIRONMENT=${FASTAPI_APP_ENVIRONMENT:-dev}
+    - SESSION_SECRET=${SESSION_SECRET}
+    - MONGO_URL=mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD}@mongo:27017
+    - MONGO_DB_NAME=${MONGO_DB_NAME:-dts2}
+    - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+    # 信任 cloudflared 轉發的 X-Forwarded-Proto: https，連動 uvicorn
+    # --forwarded-allow-ips，使 Secure cookie 與 scheme 偵測在 tunnel 後端成立。
+    # 預設留空（dev：不信任任何 proxy）；tunnel 部署填 docker bridge CIDR。
+    - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-}
+  depends_on:
+    mongo:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
+  # 預設執行路徑：直接 pull GHCR 預建映像（image），不在本機建置。
   app:
+    <<: *app-base
+    image: ghcr.io/fhcst/dprs:${APP_IMAGE_TAG:-latest}
+
+  # 本機建置（opt-in）：`docker compose --profile build build`
+  # 標記與 app 相同的 image tag，使本機產物與 GHCR 慣例同名同 tag。
+  app-build:
+    <<: *app-base
+    image: ghcr.io/fhcst/dprs:${APP_IMAGE_TAG:-latest}
     build: .
-    restart: unless-stopped
-    volumes:
-      - ./src:/app/src
-    ports:
-      - "8000:8000"
-    environment:
-      - FASTAPI_APP_ENVIRONMENT=${FASTAPI_APP_ENVIRONMENT:-dev}
-      - SESSION_SECRET=${SESSION_SECRET}
-      - MONGO_URL=mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD}@mongo:27017
-      - MONGO_DB_NAME=${MONGO_DB_NAME:-dts2}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    profiles:
+      - build
 
   mongo:
     # 暫鎖 7.0：MongoDB 8.0+ 的 TCMalloc 在 kernel 6.19~7.0.x 違反 rseq ABI，啟動即被擋
@@ -32,7 +71,8 @@ services:
     ports:
       - "127.0.0.1:27017:27017"
     healthcheck:
-      test: ["CMD", "mongosh", "-u", "${MONGO_ROOT_USERNAME:-admin}", "-p", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')", "--quiet"]
+      # ping 屬免認證指令，毋須帶帳密；避免密碼經 -p 進入 mongosh argv（每次 healthcheck 可見）。
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,11 +80,27 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    # 密碼以環境變數注入 container；server 改讀 runtime 產生的 config 檔載入 requirepass，
+    # 不讓密碼以 --requirepass 出現在 redis-server 的 argv（docker top / ps aux 可見）。
+    # 產生 config 後交回官方 docker-entrypoint.sh，以 redis 使用者啟動（保留 privilege drop）。
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        conf="$$(mktemp)"
+        cat > "$$conf" <<EOF
+        requirepass $${REDIS_PASSWORD}
+        EOF
+        chmod 644 "$$conf"
+        exec docker-entrypoint.sh redis-server "$$conf"
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      # 以 REDISCLI_AUTH（環境變數）提供密碼，避免 -a <password> 進入 redis-cli argv。
+      test: ["CMD", "sh", "-c", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,8 +110,9 @@ services:
     restart: unless-stopped
     profiles:
       - debug
+    # 僅綁 loopback，與 mongo/redis 一致；debug profile 即使在正式機啟用也不對外曝露。
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       - ME_CONFIG_MONGODB_SERVER=mongo
       - ME_CONFIG_MONGODB_PORT=27017
@@ -63,6 +120,80 @@ services:
       - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_ROOT_PASSWORD}
       - ME_CONFIG_BASICAUTH_USERNAME=${ME_USER:-admin}
       - ME_CONFIG_BASICAUTH_PASSWORD=${ME_PASSWORD}
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # Cloudflare Tunnel：正式部署的唯一對外入口（profile tunnel）。
+  # token-based remotely-managed tunnel —— ingress route（指向 http://app:8000）
+  # 於 Cloudflare dashboard 設定，repo 內不需 config.yml / credentials。
+  # cloudflared 透過 compose network 以 service name app:8000 觸達 app，
+  # 毋須 host port；淨效果：host 上不曝露任何 port，只經 Cloudflare edge 對外。
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      # [必填] 由 .env 注入；repo 內僅 placeholder，切勿提交真實 token。
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      # [選填] auto | http2 | quic，預設 auto。
+      - TUNNEL_TRANSPORT_PROTOCOL=${TUNNEL_TRANSPORT_PROTOCOL:-auto}
+    depends_on:
+      - app
+
+  # 常駐排程備份（選配，profile backup）。主力備份機制為 scripts/backup.sh；
+  # 此 service 提供「免外部 cron」的容器內定時 mongodump，輸出至 host 的 ./backups/。
+  # 密碼一律讀環境變數（與 compose 同一組），不寫死。
+  mongo-backup:
+    image: mongo:7.0
+    restart: unless-stopped
+    profiles:
+      - backup
+    volumes:
+      - ./backups:/backups
+    environment:
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-dts2}
+      # [選填] 兩次備份間隔秒數，預設 86400（24 小時）。
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        echo "[mongo-backup] 啟動，間隔 $${BACKUP_INTERVAL_SECONDS}s"
+        # 密碼寫入僅 owner 可讀的 mongodump config 檔，避免以 --password 進入 argv
+        # （備份期間 docker top / ps aux 可見 root 密碼）。
+        umask 077
+        conf="$$(mktemp)"
+        trap 'rm -f "$${conf}"' EXIT
+        cat > "$${conf}" <<EOF
+        password: $${MONGO_ROOT_PASSWORD}
+        EOF
+        while true; do
+          ts="$$(date +%Y%m%d-%H%M%S)"
+          out="/backups/dprs-$${MONGO_DB_NAME}-$${ts}.archive.gz"
+          tmp="$${out}.partial"
+          echo "[mongo-backup] dump → $${out}"
+          # 與 scripts/backup.sh 同一套韌性：
+          #  - 失敗時不讓 set -e 殺掉迴圈（包在 if 條件內），否則 restart:unless-stopped
+          #    會把暫時性失敗變成無 backoff 的 crash-loop。
+          #  - 先寫 .partial，成功才 atomic rename 為最終檔，避免留下半截的 .archive.gz。
+          if mongodump --host mongo --port 27017 \
+              --username "$${MONGO_ROOT_USERNAME}" --config "$${conf}" \
+              --authenticationDatabase admin --db "$${MONGO_DB_NAME}" \
+              --archive="$${tmp}" --gzip; then
+            mv "$${tmp}" "$${out}"
+            echo "[mongo-backup] 完成；休眠 $${BACKUP_INTERVAL_SECONDS}s"
+          else
+            echo "[mongo-backup] 備份失敗，清除半截檔，$${BACKUP_INTERVAL_SECONDS}s 後重試" >&2
+            rm -f "$${tmp}"
+          fi
+          sleep "$${BACKUP_INTERVAL_SECONDS}"
+        done
     depends_on:
       mongo:
         condition: service_healthy

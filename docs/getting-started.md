@@ -55,17 +55,29 @@ REDIS_PASSWORD=<替換為你的密碼>
 
 | 變數 | 說明 | 預設值 |
 |---|---|---|
-| `FASTAPI_APP_ENVIRONMENT` | 執行環境，`dev` 或 `prod` | `dev` |
+| `FASTAPI_APP_ENVIRONMENT` | 執行環境，`dev` 或 `prod`（`.env.example` 採安全預設 `prod`；本機開發以 `-f docker-compose.dev.yml` 疊加切回 `dev`） | `prod` |
 | `MONGO_ROOT_USERNAME` | MongoDB 管理者帳號 | `admin` |
 | `MONGO_DB_NAME` | MongoDB 資料庫（Database）名稱 | `dts2` |
+
+> **安全預設說明：** `.env.example` 預設 `FASTAPI_APP_ENVIRONMENT=prod`，使 `cp .env.example .env`
+> 後的正式啟動即為安全部署（Secure cookie + SESSION_SECRET guard）。因此**正式部署務必先換掉
+> 預設的 `SESSION_SECRET`**，否則 prod guard 會在啟動階段拒絕啟動。若只是本機開發，請改用下方
+> 的 `docker-compose.dev.yml`（以顯式 `-f` 疊加，不會被自動合併），它會把環境覆寫回 `dev`。
 
 ### 3. 啟動服務
 
 ```bash
-docker compose up -d
+# 本機開發（在 127.0.0.1:8000 直連並啟用 hot-reload）：以顯式 -f 疊加 dev overlay
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
-首次執行時，Docker 會自動建置應用程式映像檔（Image）並下載 MongoDB、Redis 映像檔，需等待數分鐘。
+預設 `docker compose up` 會直接 pull 預建映像 `ghcr.io/fhcst/dprs:${APP_IMAGE_TAG:-latest}`
+（首個映像 publish 至 GHCR 前，請先 `docker compose --profile build build` 產生本機映像），
+並下載 MongoDB、Redis 映像檔，需等待數分鐘。
+
+> **host port 行為：** 預設 `app` service **不**對外 publish 任何 port。本機開發時的
+> `127.0.0.1:8000` 來自上面以 `-f` 疊加的 `docker-compose.dev.yml`（不會被自動合併、僅供本機）。
+> 正式（tunnel）部署不疊加此檔，對外僅經 Cloudflare Tunnel，主機不曝露 8000。
 
 ### 4. 服務連接埠
 
@@ -73,10 +85,10 @@ docker compose up -d
 
 | 服務 | 連接埠 | 說明 |
 |---|---|---|
-| DPRS 應用程式 | `8000` | 主要 Web 介面 |
+| DPRS 應用程式 | `8000`（僅 localhost，且僅在套用 dev override 時） | 主要 Web 介面；正式 tunnel 部署不曝露 host port |
 | MongoDB | `27017`（僅 localhost） | 資料庫，僅限本機存取 |
 | Redis | `6379`（僅 localhost） | 快取與 Session 儲存，僅限本機存取 |
-| Mongo Express | `8081` | 資料庫管理介面（需啟用 `debug` Profile） |
+| Mongo Express | `8081`（僅 localhost） | 資料庫管理介面（需啟用 `debug` Profile） |
 
 > **注意：** Mongo Express 未包含在預設啟動範圍內。如需啟用，請執行：
 >

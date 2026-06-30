@@ -49,11 +49,39 @@
 ```bash
 cp .env.example .env
 # 編輯 .env，至少設定：SESSION_SECRET、MONGO_ROOT_PASSWORD、REDIS_PASSWORD
+# （.env.example 預設 FASTAPI_APP_ENVIRONMENT=prod，正式啟動必換 SESSION_SECRET）
 
-docker compose up
+# 本機開發直連（127.0.0.1:8000 + hot-reload，並切回 dev 模式）：
+# 以顯式 -f 疊加 docker-compose.dev.yml（不會被自動合併，故不影響正式機）
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
 服務啟動後開啟 http://localhost:8000 — 首次啟動自動導向 **Setup Wizard**。
+
+> [!IMPORTANT]
+> 預設 `docker compose up` 會直接 pull 預建映像 `ghcr.io/fhcst/dprs:${APP_IMAGE_TAG:-latest}`。
+> 在**首個映像 publish 至 GHCR 之前**，請先以本機建置 profile 產生映像（同 tag），再啟動：
+>
+> ```bash
+> docker compose --profile build build   # 首次：本機建置（含 Rust/WASM）
+> docker compose up
+> ```
+>
+> 正式部署（Cloudflare Tunnel 作為唯一對外入口、MongoDB 備份、`FASTAPI_APP_ENVIRONMENT=prod`）
+> 請參閱 [docs/getting-started.md](docs/getting-started.md) 與 `.env.example` 內的逐項說明。
+
+> [!WARNING]
+> `.env.example` 預設 `FASTAPI_APP_ENVIRONMENT=prod`（安全預設）。**本機開發**請以顯式
+> `-f` 疊加 `docker-compose.dev.yml`——它會重新 publish `127.0.0.1:8000`、掛載 `./src`，
+> 並把環境覆寫回 `dev`（hot-reload）。因該檔**不會被自動合併**，正式機完全不受影響，
+> 不需也不可依賴會被自動合併的 `docker-compose.override.yml`。
+>
+> **正式（tunnel）部署不需建立該 override**，故主機不曝露任何 host port，自然指令即安全：
+>
+> ```bash
+> # 正式（tunnel）啟動：對外僅經 Cloudflare，host 不曝露 8000
+> docker compose --profile tunnel up -d
+> ```
 
 > 完整部署說明（含本機開發、Rust 工具鏈、多架構建置）請參閱 [docs/getting-started.md](docs/getting-started.md)
 >
