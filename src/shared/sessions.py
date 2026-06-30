@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal, Optional
 
@@ -8,6 +7,8 @@ from fastapi.requests import HTTPConnection
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from starlette.datastructures import MutableHeaders
 from starlette.types import Message, Receive, Scope, Send
+
+from shared.environment import is_production
 
 
 # 建議將時間處理統一，這裡示範使用 UTC (標準作法) 或 UTC+8
@@ -115,9 +116,10 @@ class SessionMiddleware:
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                # Read env var at call time (not module load time) for correct test isolation
-                is_production = os.environ.get("FASTAPI_APP_ENVIRONMENT", "development") == "production"
-                security_flags = self.security_flags + ("; secure" if is_production else "")
+                # 於回應時透過共用 is_production() 判定（呼叫時讀取環境變數，
+                # 同時接受 prod 與 production），確保 session cookie 的 Secure
+                # 旗標與其他端點一致。
+                security_flags = self.security_flags + ("; secure" if is_production() else "")
 
                 if scope.get("session"):
                     # 1. 轉換為 dict

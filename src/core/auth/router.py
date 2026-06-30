@@ -1,5 +1,4 @@
 """Auth router: login, logout, me, password change."""
-import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -12,6 +11,7 @@ from core.auth.password import hash_password, validate_password_strength, verify
 from core.users.models import User
 from extensions.registry import registry
 from extensions.protocols import AuthProvider
+from shared.environment import is_production
 from shared.limiter import limiter
 from shared.webpage import webpage
 
@@ -22,12 +22,12 @@ _COOKIE_MAX_AGE = 60 * 60 * 24  # 24h
 
 
 def _is_production() -> bool:
-    """Return True only when FASTAPI_APP_ENVIRONMENT is explicitly 'production'.
+    """委派至共用 ``is_production()`` helper（單一事實來源）。
 
-    Read at call time (not module load time) so tests can monkeypatch os.environ.
-    Defaults to False to avoid breaking HTTP localhost development.
+    保留薄包裝以相容既有測試對 ``_is_production()`` 的直接呼叫；
+    正式環境判定同時接受 ``prod`` 與 ``production``。
     """
-    return os.getenv("FASTAPI_APP_ENVIRONMENT", "development") == "production"
+    return is_production()
 
 
 class LoginRequest(BaseModel):

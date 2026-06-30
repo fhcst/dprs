@@ -1,12 +1,11 @@
 import os
-import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from shared import SessionMiddleware, init_db
+from shared import SessionMiddleware, init_db, get_session_secret
 from shared.limiter import limiter
 from shared.database import get_motor_client
 from shared.redis import get_redis_client
@@ -92,7 +91,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 from shared.csrf import CSRFMiddleware
 
-SESSION_SECRET = os.getenv("SESSION_SECRET") or secrets.token_hex(32)
+# 透過共用 resolver 取得密鑰，使 SessionMiddleware 與 JWT 簽章共用同一把密鑰。
+SESSION_SECRET = get_session_secret()
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 app.add_middleware(CSRFMiddleware)
 

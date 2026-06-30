@@ -409,33 +409,28 @@ async def test_setup_valid_password_succeeds(wizard_app):
 
 # ─── 4.6 JWT secret warning ───────────────────────────────────────────────────
 
-def test_jwt_warns_if_default_secret(caplog):
-    """Using the default SESSION_SECRET logs a WARNING."""
+def test_jwt_warns_if_default_secret(caplog, monkeypatch):
+    """Non-production with the default SESSION_SECRET logs a WARNING (does not raise)."""
     import core.auth.jwt as jwt_module
-    original = jwt_module._SECRET
-    try:
-        jwt_module._SECRET = jwt_module._DEFAULT_SECRET
-        with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
-            jwt_module.check_secret_safety()
-        assert any(
-            "secret" in r.message.lower() or "default" in r.message.lower()
-            for r in caplog.records
-        )
-    finally:
-        jwt_module._SECRET = original
+    from shared.environment import _DEFAULT_SECRET
+    monkeypatch.delenv("FASTAPI_APP_ENVIRONMENT", raising=False)
+    with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
+        jwt_module.check_secret_safety(secret=_DEFAULT_SECRET)
+    assert any(
+        "secret" in r.message.lower() or "default" in r.message.lower()
+        for r in caplog.records
+    )
 
 
-def test_jwt_no_warning_if_custom_secret(caplog):
-    """Custom SESSION_SECRET does not log a WARNING."""
+def test_jwt_no_warning_if_custom_secret(caplog, monkeypatch):
+    """A strong custom SESSION_SECRET does not log a WARNING."""
+    import secrets
     import core.auth.jwt as jwt_module
-    original = jwt_module._SECRET
-    try:
-        jwt_module._SECRET = "very-secure-custom-secret-xyz"
-        with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
-            jwt_module.check_secret_safety()
-        assert caplog.records == []
-    finally:
-        jwt_module._SECRET = original
+    monkeypatch.delenv("FASTAPI_APP_ENVIRONMENT", raising=False)
+    strong_secret = secrets.token_hex(32)  # 64 hex chars
+    with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
+        jwt_module.check_secret_safety(secret=strong_secret)
+    assert caplog.records == []
 
 
 # ─── 7.1 Dockerfile: FORWARDED_ALLOW_IPS must not be * ───────────────────────

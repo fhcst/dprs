@@ -109,6 +109,35 @@ async def test_secure_flag_in_production(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_secure_flag_when_env_is_prod(monkeypatch):
+    """With FASTAPI_APP_ENVIRONMENT='prod', the session cookie must include '; secure'.
+
+    Exercises the load-bearing deployment value 'prod' (not just 'production')
+    through the SessionMiddleware send_wrapper, so a regression that re-introduces
+    an inline `== 'production'` check would be caught here as well as in
+    tests/test_secure_cookie.py for the access_token cookie.
+    """
+    import os
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "prod")
+
+    app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32), session_cookie="test_session")
+
+    @app.get("/set")
+    async def set_session(request: Request):
+        request.scope["session"]["user"] = "test"
+        return {"status": "ok"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/set")
+        assert response.status_code == 200
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "; secure" in set_cookie_header.lower(), (
+            f"Expected '; secure' in Set-Cookie header when env is 'prod', got: {set_cookie_header}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_no_secure_flag_in_development(monkeypatch):
     """In non-production env, session cookie must NOT include '; secure'."""
     import os

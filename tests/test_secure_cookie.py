@@ -64,6 +64,20 @@ def test_pages_router_is_production_returns_false_by_default(monkeypatch):
     assert pages_router_mod._is_production() is False
 
 
+def test_is_production_returns_true_when_env_is_prod(monkeypatch):
+    """The documented deployment value 'prod' is also treated as production.
+
+    This is the load-bearing fix: docs/compose/entrypoint all use 'prod', which
+    previously did NOT equal the literal 'production' and silently disabled Secure
+    cookies. Both routers now delegate to the shared is_production() helper.
+    """
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "prod")
+    import core.auth.router as auth_router_mod
+    import pages.router as pages_router_mod
+    assert auth_router_mod._is_production() is True
+    assert pages_router_mod._is_production() is True
+
+
 # ---------------------------------------------------------------------------
 # Integration tests: auth router /auth/login sets cookie with correct secure flag
 # ---------------------------------------------------------------------------
@@ -195,6 +209,30 @@ async def test_auth_login_sets_secure_cookie_in_production(auth_db, monkeypatch)
     )
 
 
+async def test_auth_login_sets_secure_cookie_when_env_is_prod(auth_db, monkeypatch):
+    """POST /auth/login with FASTAPI_APP_ENVIRONMENT='prod' sets the Secure flag.
+
+    Covers the documented production deployment value that previously failed the
+    literal 'production' comparison.
+    """
+    from httpx import AsyncClient, ASGITransport
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "prod")
+    app = _make_auth_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://example.com") as ac:
+        response = await ac.post(
+            "/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+
+    assert response.status_code == 200
+    set_cookie_header = response.headers.get("set-cookie", "")
+    assert "access_token" in set_cookie_header, "access_token cookie must be set"
+    assert "Secure" in set_cookie_header, (
+        "access_token cookie must include Secure flag when env is 'prod'"
+    )
+
+
 async def test_auth_login_does_not_set_secure_cookie_in_development(auth_db, monkeypatch):
     """POST /auth/login in development env does NOT set Secure flag on cookie."""
     from httpx import AsyncClient, ASGITransport
@@ -257,6 +295,27 @@ async def test_pages_login_sets_secure_cookie_in_production(pages_db, monkeypatc
     assert "access_token" in set_cookie_header, "access_token cookie must be set"
     assert "Secure" in set_cookie_header, (
         "access_token cookie must include Secure flag in production"
+    )
+
+
+async def test_pages_login_sets_secure_cookie_when_env_is_prod(pages_db, monkeypatch):
+    """POST /pages/login with FASTAPI_APP_ENVIRONMENT='prod' sets the Secure flag."""
+    from httpx import AsyncClient, ASGITransport
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "prod")
+    app = _make_pages_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://example.com") as ac:
+        response = await ac.post(
+            "/pages/login",
+            data={"username": "alice_pages", "password": "pass123"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    set_cookie_header = response.headers.get("set-cookie", "")
+    assert "access_token" in set_cookie_header, "access_token cookie must be set"
+    assert "Secure" in set_cookie_header, (
+        "access_token cookie must include Secure flag when env is 'prod'"
     )
 
 

@@ -1,5 +1,4 @@
 """Pages router — login, logout redirect, dashboard, and admin panel."""
-import os
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -7,6 +6,7 @@ from fastapi.responses import RedirectResponse
 
 from core.users.models import User
 from pages.deps import get_page_user
+from shared.environment import is_production
 from shared.limiter import limiter
 from shared.page_context import build_page_context, get_page_context
 from shared.webpage import webpage
@@ -18,12 +18,12 @@ _COOKIE_MAX_AGE = 60 * 60 * 24  # 24h
 
 
 def _is_production() -> bool:
-    """Return True only when FASTAPI_APP_ENVIRONMENT is explicitly 'production'.
+    """委派至共用 ``is_production()`` helper（單一事實來源）。
 
-    Read at call time (not module load time) so tests can monkeypatch os.environ.
-    Defaults to False to avoid breaking HTTP localhost development.
+    保留薄包裝以相容既有測試對 ``_is_production()`` 的直接呼叫；
+    正式環境判定同時接受 ``prod`` 與 ``production``。
     """
-    return os.getenv("FASTAPI_APP_ENVIRONMENT", "development") == "production"
+    return is_production()
 
 
 def _is_safe_next(next_value: str | None) -> bool:
