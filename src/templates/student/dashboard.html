@@ -254,6 +254,14 @@
              class="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 px-2.5 py-1 rounded-lg transition-colors duration-150">
             積分管理
           </a>
+          {# Literal path (not url_for): the prizes router is not registered in some
+             page-render test apps, and url_for would raise NoMatchFound there.
+             Kept in sync with the live route by tests/test_prizes.py
+             ::test_dashboard_prize_links_match_live_routes. #}
+          <a href="/pages/classes/{{ class_status.class_id }}/prizes/manage"
+             class="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 px-2.5 py-1 rounded-lg transition-colors duration-150">
+            獎品管理
+          </a>
           {% endif %}
         </div>
       </div>
@@ -353,6 +361,17 @@
           {% else %}
           <p class="text-sm text-gray-400 dark:text-gray-500">今日無任務</p>
           {% endif %}
+        </div>
+        {# Literal path (not url_for): the prizes router is not registered in some
+           page-render test apps, and url_for would raise NoMatchFound there.
+           Kept in sync with the live route by tests/test_prizes.py
+           ::test_dashboard_prize_links_match_live_routes. #}
+        <div class="px-5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-800">
+          <a href="/pages/classes/{{ c.class_id }}/prizes"
+             class="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-200 transition-colors duration-150">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 11.25v8.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 1 0 9.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1 1 14.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
+            兌換獎品
+          </a>
         </div>
       </div>
       {% endfor %}

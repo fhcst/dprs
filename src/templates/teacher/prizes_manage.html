@@ -1,0 +1,197 @@
+{% extends "shared/base.html" %}
+{% block title %}獎品管理 — {{ class_name }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
+  <a href="{{ url_for('dashboard_page') }}" class="hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 cursor-pointer">儀表板</a>
+  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+  <span class="text-gray-700 dark:text-gray-200 font-medium">獎品管理</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="mb-6">
+    <h1 class="font-heading font-bold text-2xl text-gray-900 dark:text-gray-100">獎品管理</h1>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">班級：<strong class="text-gray-700 dark:text-gray-300">{{ class_name }}</strong></p>
+  </div>
+
+  {# ── Create prize card ──────────────────────────────────────────────────── #}
+  <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200 mb-4">新增獎品</h2>
+    <form id="create-prize-form" data-url="{{ url_for('create_prize', class_id=class_id) }}" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">名稱</label>
+          <input type="text" name="title" required maxlength="100"
+                 class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">所需積分</label>
+          <input type="number" name="point_cost" min="1" step="1" value="1" required
+                 class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">說明</label>
+        <textarea name="description" rows="2"
+                  class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150"></textarea>
+      </div>
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+          <input type="checkbox" name="visible" checked
+                 class="rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500">
+          對學生顯示（可兌換）
+        </label>
+        <button type="submit"
+                class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors duration-150 cursor-pointer">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          新增獎品
+        </button>
+      </div>
+    </form>
+  </div>
+
+  {# ── Prize list (includes hidden) ──────────────────────────────────────── #}
+  <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+      <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200">獎品清單</h2>
+    </div>
+
+    {% if prizes %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800">
+            <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">獎品</th>
+            <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">積分</th>
+            <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">狀態</th>
+            <th class="px-5 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">操作</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+          {% for p in prizes %}
+          <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors duration-100">
+            <td class="px-5 py-3.5">
+              <p class="font-medium text-gray-900 dark:text-gray-100">{{ p.title }}</p>
+              {% if p.description %}
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ p.description }}</p>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3.5 font-heading font-semibold text-gray-900 dark:text-gray-100">{{ p.point_cost }}</td>
+            <td class="px-5 py-3.5">
+              {% if p.visible %}
+              <span class="inline-flex items-center gap-1 text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-full px-2 py-0.5">顯示中</span>
+              {% else %}
+              <span class="inline-flex items-center gap-1 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-full px-2 py-0.5">已隱藏</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3.5">
+              <div class="flex items-center justify-end gap-2">
+                <button type="button"
+                        class="toggle-visible-btn inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-200 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-100 dark:hover:bg-brand-900/50 border border-brand-200 dark:border-brand-800 px-2.5 py-1.5 rounded-lg transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                        data-url="{{ url_for('update_prize', prize_id=p.id) }}"
+                        data-visible="{{ 'true' if p.visible else 'false' }}">
+                  {{ '隱藏' if p.visible else '顯示' }}
+                </button>
+                <button type="button"
+                        class="delete-prize-btn inline-flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 px-2.5 py-1.5 rounded-lg transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                        data-url="{{ url_for('delete_prize', prize_id=p.id) }}"
+                        data-title="{{ p.title }}">
+                  刪除
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="py-10 text-center">
+      <p class="text-sm text-gray-400 dark:text-gray-500">尚未建立任何獎品，使用上方表單新增第一個獎品。</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // ── Create ────────────────────────────────────────────────────────────────
+  var createForm = document.getElementById('create-prize-form');
+  if (createForm) {
+    createForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = createForm.querySelector('button[type="submit"]');
+      var pointCost = parseInt(createForm.point_cost.value, 10);
+      var payload = {
+        title: createForm.title.value.trim(),
+        description: createForm.description.value.trim(),
+        point_cost: pointCost,
+        visible: createForm.visible.checked,
+      };
+      if (!payload.title) { Toast.error('請輸入獎品名稱'); return; }
+      // Mirror the server's point_cost > 0 invariant: a 0 / negative cost would
+      // create a visible prize the redeem endpoint always rejects.
+      if (!Number.isFinite(pointCost) || pointCost <= 0) { Toast.error('所需積分必須大於 0'); return; }
+      withLoading(btn, function () {
+        return fetch(createForm.dataset.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).then(function (resp) {
+          if (!resp.ok) {
+            return resp.json().catch(function () { return {}; }).then(function (err) {
+              Toast.error('新增失敗：' + (err.detail || resp.status));
+            });
+          }
+          location.reload();
+        });
+      });
+    });
+  }
+
+  // ── Toggle visibility ──────────────────────────────────────────────────────
+  document.querySelectorAll('.toggle-visible-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var nextVisible = btn.dataset.visible !== 'true';   // flip current state
+      withLoading(btn, function () {
+        return fetch(btn.dataset.url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visible: nextVisible }),
+        }).then(function (resp) {
+          if (!resp.ok) {
+            return resp.json().catch(function () { return {}; }).then(function (err) {
+              Toast.error('更新失敗：' + (err.detail || resp.status));
+            });
+          }
+          location.reload();
+        });
+      });
+    });
+  });
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  document.querySelectorAll('.delete-prize-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var title = btn.dataset.title || '此獎品';
+      Modal.confirm('確定要刪除「' + title + '」嗎？此操作無法復原。', function () {
+        withLoading(btn, function () {
+          return fetch(btn.dataset.url, { method: 'DELETE' }).then(function (resp) {
+            if (!resp.ok && resp.status !== 204) {
+              return resp.json().catch(function () { return {}; }).then(function (err) {
+                Toast.error('刪除失敗：' + (err.detail || resp.status));
+              });
+            }
+            location.reload();
+          });
+        });
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}
