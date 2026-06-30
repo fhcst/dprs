@@ -44,7 +44,7 @@ def register_auth_provider():
 
 @pytest.fixture
 async def db_app():
-    from core.classes.models import Class, ClassMembership
+    from core.classes.models import Class, ClassMembership, JoinRequest
     from core.users.models import User
     from gamification.badges.models import BadgeAward, BadgeDefinition
     from gamification.points.models import ClassPointConfig, PointTransaction
@@ -57,7 +57,7 @@ async def db_app():
     await init_beanie(
         database=db,
         document_models=[
-            User, Class, ClassMembership,
+            User, Class, ClassMembership, JoinRequest,
             TaskTemplate, TaskAssignment, TaskScheduleRule, TaskSubmission,
             CheckinConfig, DailyCheckinOverride, CheckinRecord,
             PointTransaction, ClassPointConfig,

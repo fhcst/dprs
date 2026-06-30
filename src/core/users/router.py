@@ -85,6 +85,16 @@ def _user_admin_response(user: User) -> dict:
     return admin_view(user)
 
 
+@router.get("/users/check-username")
+async def check_username(
+    username: str,
+    _: User = Depends(require_permission(MANAGE_USERS)),
+):
+    """Check whether a username is already taken. Returns {available: bool}."""
+    existing = await User.find_one(User.username == username)
+    return {"available": existing is None}
+
+
 @router.get("/users")
 async def list_users(
     page: int = 1,

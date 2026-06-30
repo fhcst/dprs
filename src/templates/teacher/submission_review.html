@@ -12,13 +12,14 @@
 {% endblock %}
 
 {% block content %}
+<div class="max-w-5xl mx-auto">
 <div class="mb-6">
   <h1 class="font-heading font-bold text-2xl text-gray-900 dark:text-gray-100">任務審查</h1>
   <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">班級：<strong class="text-gray-700 dark:text-gray-300">{{ class_name }}</strong></p>
 </div>
 
 {# ── Toast notifications ──────────────────────────────────────────────────── #}
-<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+{# Toast container is now global in base.html #}
 
 {# ── Count pending submissions for badge ─────────────────────────────────── #}
 {% set ns = namespace(pending_count=0) %}
@@ -31,20 +32,20 @@
 {% endfor %}
 
 {# ── Filter tabs ─────────────────────────────────────────────────────────── #}
-<div class="flex gap-2 mb-4 flex-wrap">
-  <button data-filter="pending"
-          class="filter-tab active px-4 py-2 rounded-lg text-sm font-medium bg-brand-600 text-white transition-colors duration-150 cursor-pointer">
+<div class="flex gap-2 mb-4 flex-wrap" role="tablist" aria-label="提交狀態篩選">
+  <button data-filter="pending" role="tab" aria-selected="true"
+          class="filter-tab active px-4 py-2 rounded-lg text-sm font-medium bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border border-brand-300 dark:border-brand-700 transition-colors duration-150 cursor-pointer">
     待審閱 <span class="ml-1 px-1.5 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700" id="pending-count-badge">{{ ns.pending_count }}</span>
   </button>
-  <button data-filter="approved"
+  <button data-filter="approved" role="tab" aria-selected="false"
           class="filter-tab px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 cursor-pointer">
-    已確認
+    已通過
   </button>
-  <button data-filter="rejected"
+  <button data-filter="rejected" role="tab" aria-selected="false"
           class="filter-tab px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 cursor-pointer">
     已退回
   </button>
-  <button data-filter="all"
+  <button data-filter="all" role="tab" aria-selected="false"
           class="filter-tab px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 cursor-pointer">
     全部
   </button>
@@ -229,13 +230,15 @@
 </div>
 
 {% else %}
-<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-12 text-center">
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
   <svg class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
   </svg>
-  <p class="text-gray-500 dark:text-gray-400">此班級尚無提交記錄</p>
+  <p class="text-sm font-medium text-gray-500 dark:text-gray-400">今天沒有待審作業</p>
+  <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">學生提交後會顯示在這裡</p>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block head_extra %}
@@ -247,7 +250,8 @@
     const noResults = document.getElementById('no-results');
     const listContainer = document.getElementById('submissions-list');
 
-    const ACTIVE_CLS = ['bg-brand-600', 'text-white'];
+    const ACTIVE_CLS = ['bg-brand-100', 'dark:bg-brand-900/30', 'text-brand-700', 'dark:text-brand-300',
+                        'border', 'border-brand-300', 'dark:border-brand-700'];
     const INACTIVE_CLS = ['bg-white', 'dark:bg-gray-800', 'text-gray-600', 'dark:text-gray-400',
                           'border', 'border-gray-200', 'dark:border-gray-700',
                           'hover:bg-gray-50', 'dark:hover:bg-gray-700'];
@@ -256,9 +260,11 @@
       tabs.forEach(function (t) {
         ACTIVE_CLS.forEach(function (c) { t.classList.remove(c); });
         INACTIVE_CLS.forEach(function (c) { t.classList.add(c); });
+        t.setAttribute('aria-selected', 'false');
       });
       INACTIVE_CLS.forEach(function (c) { btn.classList.remove(c); });
       ACTIVE_CLS.forEach(function (c) { btn.classList.add(c); });
+      btn.setAttribute('aria-selected', 'true');
     }
 
     function filterCards(status) {
@@ -347,10 +353,9 @@
   }
 
   /* ── Approve ──────────────────────────────────────────────────────── */
-  async function approveSubmission(subId) {
+  function approveSubmission(subId) {
     const btn = document.getElementById('approve-btn-' + subId);
-    btn.disabled = true;
-    try {
+    withLoading(btn, async function () {
       const resp = await fetch(`/api/submissions/${subId}/approve`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -359,21 +364,17 @@
         updateBadge(subId, 'approved');
         // Hide reject panel if open
         document.getElementById('reject-panel-' + subId)?.classList.add('hidden');
-        showToast('已確認該作業', 'success');
+        Toast.success('已通過該作業');
         updatePendingCount();
       } else {
         const data = await resp.json().catch(() => ({}));
-        showToast(data.detail || '確認失敗，請再試一次', 'error');
-        btn.disabled = false;
+        Toast.error(data.detail || '操作失敗，請再試一次');
       }
-    } catch {
-      showToast('網路錯誤', 'error');
-      btn.disabled = false;
-    }
+    });
   }
 
   /* ── Reject ───────────────────────────────────────────────────────── */
-  async function confirmReject(subId) {
+  function confirmReject(subId) {
     const reason = document.getElementById('reject-reason-' + subId).value.trim();
     const reasonErr = document.getElementById('reject-reason-error-' + subId);
     if (!reason) {
@@ -386,8 +387,7 @@
     const deadline = deadlineInput?.value || null;
 
     const btn = document.getElementById('reject-confirm-' + subId);
-    btn.disabled = true;
-    try {
+    withLoading(btn, async function () {
       const body = { rejection_reason: reason };
       if (deadline) body.resubmit_deadline = new Date(deadline).toISOString();
 
@@ -399,44 +399,35 @@
       if (resp.ok) {
         updateBadge(subId, 'rejected');
         document.getElementById('reject-panel-' + subId).classList.add('hidden');
-        showToast('已退回該作業並撤銷積分', 'success');
+        Toast.success('已退回該作業並撤銷積分');
         updatePendingCount();
       } else {
         const data = await resp.json().catch(() => ({}));
-        showToast(data.detail || '退回失敗，請再試一次', 'error');
-        btn.disabled = false;
+        Toast.error(data.detail || '退回失敗，請再試一次');
       }
-    } catch {
-      showToast('網路錯誤', 'error');
-      btn.disabled = false;
-    }
+    });
   }
 
   /* ── Teacher comment ──────────────────────────────────────────────── */
-  async function submitComment(event, submissionId) {
+  function submitComment(event, submissionId) {
     event.preventDefault();
     const form = event.target;
     const input = form.querySelector('input[name="comment"]');
     const comment = input.value.trim();
     const btn = form.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    try {
+    withLoading(btn, async function () {
       const resp = await fetch(`/api/submissions/${submissionId}/comment`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({comment}),
       });
       if (resp.ok) {
-        showToast('評語已儲存', 'success');
+        Toast.success('評語已儲存');
         input.placeholder = '更新評語…';
       } else {
-        showToast('儲存失敗，請再試一次', 'error');
+        Toast.error('儲存失敗，請再試一次');
       }
-    } catch {
-      showToast('網路錯誤', 'error');
-    } finally {
-      btn.disabled = false;
-    }
+    });
   }
 
   /* ── Update pending count badge ────────────────────────────────────── */
@@ -447,20 +438,6 @@
     badge.textContent = count;
   }
 
-  /* ── Toast ────────────────────────────────────────────────────────── */
-  function showToast(message, type) {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    const bg = type === 'success'
-      ? 'bg-green-600 dark:bg-green-700'
-      : 'bg-red-600 dark:bg-red-700';
-    toast.className = `pointer-events-auto ${bg} text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-lg transition-opacity duration-300`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => {
-      toast.classList.add('opacity-0');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
-  }
+  /* Toast is now global — use Toast.success() / Toast.error() / Toast.info() from base.html */
 </script>
 {% endblock %}

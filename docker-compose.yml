@@ -19,7 +19,9 @@ services:
         condition: service_healthy
 
   mongo:
-    image: mongo:8.0
+    # 暫鎖 7.0：MongoDB 8.0+ 的 TCMalloc 在 kernel 6.19~7.0.x 違反 rseq ABI，啟動即被擋
+    # (SERVER-121912)。本機 OrbStack kernel 為 7.0.11。待官方釋出含修正的 8.0.x 再升回。
+    image: mongo:7.0
     restart: unless-stopped
     environment:
       MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-dts2}

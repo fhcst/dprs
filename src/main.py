@@ -104,9 +104,13 @@ from starlette.responses import RedirectResponse as _RedirectResponse
 class SetupGuardMiddleware(BaseHTTPMiddleware):
     """Redirect every request to /setup when the system has not been configured yet."""
 
+    # 設定完成前需放行的路徑前綴：/setup 本身，以及靜態資源
+    # （否則 CSS/JS/圖片/WASM 也會被導去 /setup，導致 setup 頁面失去樣式）
+    _ALLOWED_PREFIXES = ("/setup", "/static")
+
     async def dispatch(self, request, call_next):
         if getattr(request.app.state, "system_config", None) is None:
-            if not request.url.path.startswith("/setup"):
+            if not request.url.path.startswith(self._ALLOWED_PREFIXES):
                 return _RedirectResponse(url="/setup", status_code=302)
         return await call_next(request)
 
@@ -136,6 +140,10 @@ from fastapi.staticfiles import StaticFiles as _StaticFiles
 _dsl_pkg = _Path(__file__).resolve().parent.parent / "crates" / "dsl-engine" / "pkg"
 if _dsl_pkg.is_dir():
     app.mount("/static/dsl-engine", _StaticFiles(directory=str(_dsl_pkg)), name="dsl-engine-static")
+
+_static_dir = _Path(__file__).resolve().parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", _StaticFiles(directory=str(_static_dir)), name="static")
 
 app.include_router(system_router)
 app.include_router(auth_router)

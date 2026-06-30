@@ -43,7 +43,7 @@ def register_auth_provider():
 
 async def _make_full_db(db_name: str):
     """Initialise mongomock with all models needed for these tests."""
-    from core.classes.models import Class, ClassMembership
+    from core.classes.models import Class, ClassMembership, JoinRequest
     from core.users.models import User
     from gamification.badges.models import BadgeAward, BadgeDefinition
     from gamification.points.models import ClassPointConfig, PointTransaction
@@ -56,7 +56,7 @@ async def _make_full_db(db_name: str):
     await init_beanie(
         database=db,
         document_models=[
-            User, Class, ClassMembership,
+            User, Class, ClassMembership, JoinRequest,
             TaskTemplate, TaskAssignment, TaskScheduleRule, TaskSubmission,
             CheckinConfig, DailyCheckinOverride, CheckinRecord,
             PointTransaction, ClassPointConfig,
