@@ -949,42 +949,29 @@ tests:
 ---
 ### Requirement: Auth cookies use Secure flag in production
 
-The system SHALL set `secure=True` on the `access_token` cookie when `FASTAPI_APP_ENVIRONMENT` is set to `production`. This applies to both the API login endpoint (`POST /auth/login`) and the form login endpoint (`POST /pages/login`). In non-production environments, the `secure` flag MAY be omitted to allow HTTP-based local development.
+The system SHALL set `secure=True` on the `access_token` cookie when the deployment is production as determined by the shared `is_production()` helper — that is, when `FASTAPI_APP_ENVIRONMENT` normalizes to either `prod` or `production`. This applies to both the API login endpoint (`POST /auth/login`) and the form login endpoint (`POST /pages/login`), and to the session cookie issued by `SessionMiddleware`. In non-production environments, the `secure` flag MAY be omitted to allow HTTP-based local development.
 
 #### Scenario: Production login sets Secure cookie
 
-- **WHEN** a user successfully authenticates via `POST /auth/login` or `POST /pages/login` in a production environment
+- **WHEN** a user successfully authenticates via `POST /auth/login` or `POST /pages/login` while `is_production()` is `True` (including `FASTAPI_APP_ENVIRONMENT=prod`)
 - **THEN** the `access_token` cookie SHALL include the `Secure` attribute
 
 #### Scenario: Non-production login omits Secure flag
 
-- **WHEN** a user successfully authenticates in a non-production environment
+- **WHEN** a user successfully authenticates while `is_production()` is `False`
 - **THEN** the `access_token` cookie MAY omit the `Secure` attribute
 
 
 <!-- @trace
-source: security-hardening
-updated: 2026-03-25
+source: harden-prod-secret-guard
+updated: 2026-07-01
 code:
-  - src/shared/sessions.py
-  - src/shared/limiter.py
-  - docker-compose.yml
-  - uv.lock
-  - src/core/system/router.py
-  - src/core/auth/router.py
-  - src/shared/csrf.py
-  - pyproject.toml
-  - src/core/auth/jwt.py
-  - src/main.py
-  - src/pages/router.py
-tests:
-  - tests/test_csrf.py
-  - tests/test_setup_startup.py
-  - tests/test_identity_tags.py
-  - tests/test_security_audit.py
-  - tests/test_rate_limiting.py
-  - tests/test_secure_cookie.py
-  - tests/test_sessions.py
+  - .understand-anything/fingerprints.json
+  - .understand-anything/intermediate/scan-result.json
+  - .understand-anything/config.json
+  - .understand-anything/knowledge-graph.json
+  - .understand-anything/.understandignore
+  - .understand-anything/meta.json
 -->
 
 ---
@@ -1099,6 +1086,36 @@ The system SHALL capture `next` ONLY for idempotent (GET) requests. Because the 
 - **THEN** the system SHALL redirect (HTTP 302) to the login page WITHOUT a `next` query parameter (the POST-only path SHALL NOT be stored)
 - **AND** a subsequent successful login SHALL fall back to `GET /pages/dashboard` instead of replaying a GET against the POST-only route (which would return `405 Method Not Allowed`)
 
+---
+### Requirement: Single source of truth for production environment detection
+
+The system SHALL determine whether it is running in a production deployment through a single shared helper `is_production()` rather than through inline string comparisons scattered across modules. The helper SHALL normalize the `FASTAPI_APP_ENVIRONMENT` environment variable by trimming surrounding whitespace and lower-casing it, and SHALL treat the deployment as production WHEN the normalized value is either `prod` or `production`. All other values — including `dev`, `development`, `staging`, and an unset variable — SHALL be treated as non-production. The helper SHALL read the environment variable at call time (not at module import time) so that tests can override it.
+
+All previously inline production checks — in JWT secret validation, the auth router, the pages router, and the session middleware — SHALL resolve to this single helper, so that every consumer agrees on what counts as production.
+
+#### Scenario: prod and production both detected as production
+
+- **WHEN** `is_production()` is evaluated with `FASTAPI_APP_ENVIRONMENT` set to `prod`, `production`, or `PROD`
+- **THEN** the helper SHALL return `True`
+
+#### Scenario: Development and unset are non-production
+
+- **WHEN** `is_production()` is evaluated with `FASTAPI_APP_ENVIRONMENT` set to `dev`, set to `development`, or not set at all
+- **THEN** the helper SHALL return `False`
+
+##### Example: environment normalization outcomes
+
+| `FASTAPI_APP_ENVIRONMENT` | `is_production()` |
+| ------------------------- | ----------------- |
+| `prod`                    | `True`            |
+| `production`              | `True`            |
+| `PROD`                    | `True`            |
+| `  production  `          | `True`            |
+| `dev`                     | `False`           |
+| `development`             | `False`           |
+| `staging`                 | `False`           |
+| (unset)                   | `False`           |
+
 ## ADDED Requirements
 
 
@@ -1151,6 +1168,19 @@ tests:
   - tests/test_pages.py
 -->
 
+
+<!-- @trace
+source: harden-prod-secret-guard
+updated: 2026-07-01
+code:
+  - .understand-anything/fingerprints.json
+  - .understand-anything/intermediate/scan-result.json
+  - .understand-anything/config.json
+  - .understand-anything/knowledge-graph.json
+  - .understand-anything/.understandignore
+  - .understand-anything/meta.json
+-->
+
 ### Requirement: JWT secret safety check at startup
 
 The system SHALL check whether the `SESSION_SECRET` environment variable is set to the default development value at application startup. If the default value is detected, the system SHALL log a WARNING to alert operators that the secret must be changed before production use.
@@ -1197,6 +1227,19 @@ tests:
   - tests/test_rate_limiting.py
   - tests/test_secure_cookie.py
   - tests/test_sessions.py
+-->
+
+
+<!-- @trace
+source: harden-prod-secret-guard
+updated: 2026-07-01
+code:
+  - .understand-anything/fingerprints.json
+  - .understand-anything/intermediate/scan-result.json
+  - .understand-anything/config.json
+  - .understand-anything/knowledge-graph.json
+  - .understand-anything/.understandignore
+  - .understand-anything/meta.json
 -->
 
 ### Requirement: Password hashing uses Argon2id
