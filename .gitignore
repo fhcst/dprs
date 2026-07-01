@@ -22,6 +22,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 .pytest_cache/
+pytest-result.txt
 
 # --- Environments ---
 .env
@@ -133,6 +134,10 @@ backups/
 # compose 會在每個無 -f 的 up 自動合併同名的 docker-compose.override.yml（與 profile 無關），
 # 連 `--profile tunnel up` 都會被它重新曝露 host port，故一律 gitignore 防止誤入 repo。
 docker-compose.override.yml
+
+# --- 安全稽核與分析產物（本機工具輸出，含漏洞細節/本機路徑，嚴禁提交）---
+.security-audit/
+.understand-anything/
 
 # --- AI Agent local settings ---
 .claude/settings.local.json
