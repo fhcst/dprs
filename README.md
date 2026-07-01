@@ -116,12 +116,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 |------|------|
 | [CHANGELOG.md](CHANGELOG.md) | 版本紀錄 |
 | [SECURITY.md](SECURITY.md) | 安全政策與漏洞通報 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 社群行為準則 |
 
 ---
 
 ## 貢獻
 
 歡迎提交 Pull Request！詳細流程請參閱 [CONTRIBUTING.md](CONTRIBUTING.md)。
+參與本專案請一併遵守 [行為準則（Code of Conduct）](CODE_OF_CONDUCT.md)。
 
 ## 安全性
 
@@ -130,3 +132,5 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ## 授權
 
 [ECL-2.0](LICENSE)
+
+Copyright © 2026 fhcst · CXPh03n1x

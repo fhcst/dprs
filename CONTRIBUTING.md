@@ -30,8 +30,8 @@
 
 ```bash
 # 複製儲存庫
-git clone https://github.com/fhsh-tp/daily-practice-report.git
-cd daily-practice-report
+git clone https://github.com/fhcst/dprs.git
+cd dprs
 
 # 安裝相依套件
 uv sync

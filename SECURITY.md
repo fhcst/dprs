@@ -4,8 +4,8 @@
 
 | 版本    | 支援狀態           |
 | ------- | ------------------ |
-| 0.5.0   | :white_check_mark: 安全更新支援中 |
-| < 0.5.0 | :x: 已停止支援     |
+| 1.0.x   | :white_check_mark: 安全更新支援中 |
+| < 1.0   | :x: 已停止支援     |
 
 建議所有使用者升級至最新版本以獲得完整的安全修補。
 
@@ -17,9 +17,15 @@
 
 ### 通報方式
 
-請將漏洞詳情以電子郵件寄送至：
+**優先管道 — GitHub 私密漏洞通報（Private Vulnerability Reporting）**
 
-> **security@example.com**
+請至本專案 GitHub Repository 的 **Security** 分頁，點選 **「Report a vulnerability」** 提交私密通報。此管道不會公開揭露，也不需外露任何信箱。
+
+**備援管道 — 電子郵件**
+
+亦可將漏洞詳情以電子郵件寄送至：
+
+> **0826@fhsh.tp.edu.tw**
 
 郵件中請盡可能包含以下資訊：
 
@@ -156,4 +162,4 @@
 
 ## 聯絡資訊
 
-若有任何安全相關疑問，請聯繫：**security@example.com**
+若有任何安全相關疑問，請透過 GitHub 私密漏洞通報（Security → Report a vulnerability），或來信：**0826@fhsh.tp.edu.tw**

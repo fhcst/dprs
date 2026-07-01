@@ -1,5 +1,5 @@
 """
-Migration CLI for the daily-training-submit-system.
+Migration CLI for DPRS (Daily Practice Report System).
 
 Usage:
     uv run python scripts/migrate.py init

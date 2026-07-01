@@ -3,7 +3,7 @@
 本檔案記錄本專案所有重要變更。格式依循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，
 版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 
-## [1.0.0] - 2026-04-04
+## [1.0.0] - 2026-07-01
 
 ### Added（新增）
 
@@ -16,6 +16,10 @@
 - **Docker Buildx 跨平台建置腳本**（`scripts/docker-build.sh`）— 支援 `linux/amd64` + `linux/arm64`
 - **容器啟動自動資料庫遷移**（`docker-entrypoint.sh`）
 - 觸發規則管理 API（`src/gamification/triggers/`）
+- **獎品兌換（Prize Redemption）** — 學生以點數兌換獎品，串起點數經濟的最後一哩
+- **Cloudflare Tunnel 部署** — 以 `cloudflared` 作為唯一對外入口（profile `tunnel`），token/protocol 走 `.env`
+- **GHCR 預建映像** — `docker compose up` 預設 pull `ghcr.io/fhcst/dprs`，本機 build 移入 opt-in profile；GitHub Actions 於 version tag 自動發佈 multi-arch 映像
+- **MongoDB 備份** — `scripts/backup.sh` 與選配 `mongo-backup` 排程 service（profile `backup`）
 
 ### Security（安全性）
 
@@ -26,6 +30,10 @@
 - **JWT 啟動強制檢查**：生產環境若 `SESSION_SECRET` 為預設值則拋出 `RuntimeError` 拒絕啟動
 - 生產環境強制 Secure Cookie 旗標
 - 學生提交頁面：非成員回傳 HTTP 403
+- **修正 `FASTAPI_APP_ENVIRONMENT` 不一致**導致正式環境靜默關閉 Secure cookie 與弱密鑰守門
+- **跨班授權全面收斂（release 前 security audit）**：教師提交列表/審閱頁、出缺勤頁、範本清單/新增/編輯/指派頁、點數管理頁一律強制 class-scoped 授權（CWE-639）；排行榜頁強制班級成員檢查（CWE-862）
+- **點數改為班級範圍計算**：排行榜、點數管理頁、扣點/追回回應與上限杜絕跨班點數外洩（CWE-200）
+- **排程規則請求驗證**：`schedule_type` 限定與各模式必填日期欄位，malformed 於持久化前回 422（CWE-20）
 
 ### Fixed（修正）
 
@@ -35,6 +43,11 @@
 - 修復 CSV 匯入缺少錯誤訊息問題
 - 修復 `.env` 與 Docker Compose 變數名稱不符問題
 - **[P0]** 修復打卡流程崩潰問題（Codex Review P0）
+- **[P0]** 修復共用 Modal 確認生命週期，恢復建立/加入班級功能
+- **[P1]** 修復 `empty_state` macro 圖示被跳脫為原始碼
+- **[P2]** 修復登入後 `next` 深層連結返回並硬化 open-redirect 防護
+- 修復 SetupGuard middleware 未放行靜態資源前綴導致 setup 頁面失去樣式
+- 升級 `fastapi-webpage` v0.2.1 → v0.3.1 並鎖定 tag
 
 ## [0.6.0] - 2026-04-01
 
@@ -187,11 +200,11 @@
 - **社群牆** — 學生動態牆
 - 完整規格文件（Spec）與變更提案（Change Proposal）
 - README、使用說明、貢獻指南
-- 專案重新命名為 DPRS（Daily Practice Recording System）
+- 專案重新命名為 DPRS（Daily Practice Report System）
 
-[1.0.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.3.0...v0.5.0
-[0.3.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/fhsh-tp/daily-training-submit-system/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/fhsh-tp/daily-training-submit-system/releases/tag/v0.1.0
+[1.0.0]: https://github.com/fhcst/dprs/compare/v0.6.0...v1.0.0
+[0.6.0]: https://github.com/fhcst/dprs/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/fhcst/dprs/compare/v0.3.0...v0.5.0
+[0.3.0]: https://github.com/fhcst/dprs/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/fhcst/dprs/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/fhcst/dprs/releases/tag/v0.1.0
