@@ -69,47 +69,96 @@ async def test_delete_prize(db, teacher):
 # ─── Router-level test: student visibility filter ────────────────────────────
 
 @pytest.fixture
-async def prizes_app(db):
+async def prizes_app():
+    """Class Alpha with a managing teacher, a member student, and a non-member outsider."""
     from core.users.models import User, IdentityTag
+    from core.classes.models import Class, ClassMembership
     from core.auth.password import hash_password
-    from core.auth.permissions import STUDENT
+    from core.auth.permissions import STUDENT, TEACHER
     from fastapi import FastAPI
+    from gamification.prizes.models import Prize
     from gamification.prizes.router import router as prizes_router
 
-    student = User(
-        username="stu_list",
-        hashed_password=hash_password("pw"),
-        display_name="Student",
-        permissions=int(STUDENT),
-        identity_tags=[IdentityTag.STUDENT],
-    )
+    client = AsyncMongoMockClient()
+    database = client.get_database("test_prizes_list")
+    await init_beanie(database=database, document_models=[User, Prize, Class, ClassMembership])
+
+    teacher = User(username="pz_teacher", hashed_password=hash_password("pw"),
+                   display_name="T", permissions=int(TEACHER))
+    await teacher.insert()
+    student = User(username="stu_list", hashed_password=hash_password("pw"),
+                   display_name="Student", permissions=int(STUDENT),
+                   identity_tags=[IdentityTag.STUDENT])
     await student.insert()
+    outsider = User(username="pz_outsider", hashed_password=hash_password("pw"),
+                    display_name="Outsider", permissions=int(STUDENT),
+                    identity_tags=[IdentityTag.STUDENT])
+    await outsider.insert()
+
+    alpha = Class(name="Alpha", visibility="private",
+                  owner_id=str(teacher.id), invite_code="ALPHA001")
+    await alpha.insert()
+    await ClassMembership(class_id=str(alpha.id), user_id=str(teacher.id), role="teacher").insert()
+    await ClassMembership(class_id=str(alpha.id), user_id=str(student.id), role="student").insert()
 
     app = FastAPI()
     app.include_router(prizes_router)
-    return app, student
+    yield app, teacher, student, outsider, alpha
+    client.close()
 
 
-async def test_student_list_prizes_returns_200(prizes_app):
-    """Student calling list_prizes must return 200 and see only visible prizes.
-
-    Bug (R7): user.role raises AttributeError — User uses identity_tags, not role.
-    """
+async def test_member_student_list_prizes_returns_200(prizes_app):
+    """Member student sees only visible prizes (200)."""
     from core.auth.jwt import create_access_token
     from core.auth.permissions import STUDENT
     from gamification.prizes.models import Prize
 
-    app, student = prizes_app
-    await Prize(class_id="cls1", title="Visible", visible=True, point_cost=10, created_by=str(student.id)).insert()
-    await Prize(class_id="cls1", title="Hidden", visible=False, point_cost=20, created_by=str(student.id)).insert()
+    app, teacher, student, outsider, alpha = prizes_app
+    await Prize(class_id=str(alpha.id), title="Visible", visible=True, point_cost=10, created_by=str(teacher.id)).insert()
+    await Prize(class_id=str(alpha.id), title="Hidden", visible=False, point_cost=20, created_by=str(teacher.id)).insert()
 
     token = create_access_token(user_id=str(student.id), permissions=int(STUDENT))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ac.cookies.set("access_token", token)
-        resp = await ac.get("/classes/cls1/prizes")
+        resp = await ac.get(f"/classes/{alpha.id}/prizes")
     assert resp.status_code == 200
     titles = [p["title"] for p in resp.json()]
     assert titles == ["Visible"]
+
+
+async def test_non_member_cannot_list_prizes(prizes_app):
+    """Non-member enumerating another class's prizes → 403 (CWE-200)."""
+    from core.auth.jwt import create_access_token
+    from core.auth.permissions import STUDENT
+    from gamification.prizes.models import Prize
+
+    app, teacher, student, outsider, alpha = prizes_app
+    await Prize(class_id=str(alpha.id), title="Visible", visible=True, point_cost=10, created_by=str(teacher.id)).insert()
+
+    token = create_access_token(user_id=str(outsider.id), permissions=int(STUDENT))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get(f"/classes/{alpha.id}/prizes")
+    assert resp.status_code == 403
+
+
+async def test_manager_lists_all_prizes_including_hidden(prizes_app):
+    """Managing teacher sees all prizes including invisible ones (200)."""
+    from core.auth.jwt import create_access_token
+    from core.auth.permissions import TEACHER
+    from gamification.prizes.models import Prize
+
+    app, teacher, student, outsider, alpha = prizes_app
+    await Prize(class_id=str(alpha.id), title="Visible", visible=True, point_cost=10, created_by=str(teacher.id)).insert()
+    await Prize(class_id=str(alpha.id), title="Hidden", visible=False, point_cost=20, created_by=str(teacher.id)).insert()
+
+    token = create_access_token(user_id=str(teacher.id), permissions=int(TEACHER))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get(f"/classes/{alpha.id}/prizes")
+    assert resp.status_code == 200
+    titles = sorted(p["title"] for p in resp.json())
+    assert titles == ["Hidden", "Visible"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

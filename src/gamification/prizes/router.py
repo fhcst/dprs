@@ -9,7 +9,7 @@ from core.auth.guards import require_permission
 from core.auth.permissions import MANAGE_TASKS
 from core.classes.models import Class, ClassMembership
 from core.classes.service import can_manage_class
-from core.users.models import IdentityTag, User
+from core.users.models import User
 from gamification.points.service import get_balance
 from gamification.prizes.models import Prize
 from gamification.prizes.service import InsufficientPointsError, redeem_prize
@@ -76,10 +76,26 @@ async def list_prizes(
     class_id: str,
     user: User = Depends(get_current_user),
 ):
-    if IdentityTag.STUDENT in user.identity_tags:
-        prizes = await Prize.find(Prize.class_id == class_id, Prize.visible == True).to_list()  # noqa: E712
-    else:
+    cls = await Class.get(class_id)
+    if cls is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    # Class-scoped authorization: managers see all prizes; members see only
+    # visible prizes; non-members are refused (was: any authenticated user could
+    # enumerate another class's prizes, incl. invisible ones — CWE-200).
+    is_manager = await can_manage_class(user, cls)
+    if not is_manager:
+        membership = await ClassMembership.find_one(
+            ClassMembership.class_id == class_id,
+            ClassMembership.user_id == str(user.id),
+        )
+        if membership is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this class")
+
+    if is_manager:
         prizes = await Prize.find(Prize.class_id == class_id).to_list()
+    else:
+        prizes = await Prize.find(Prize.class_id == class_id, Prize.visible == True).to_list()  # noqa: E712
     return [
         {
             "id": str(p.id),
