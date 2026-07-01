@@ -220,6 +220,10 @@ async def attendance_manage_page(
     if cls is None:
         raise HTTPException(status_code=404, detail="Class not found")
 
+    from core.classes.service import can_manage_class
+    if not await can_manage_class(teacher, cls):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     # Default to today (Page defaults to today's date)
     if target_date:
         selected_date = date_type.fromisoformat(target_date)

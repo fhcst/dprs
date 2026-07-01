@@ -1,12 +1,12 @@
 """Task templates router."""
 import logging
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 _DateField = date  # module-level alias — prevents 'date' Pydantic field from shadowing the type
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from core.auth.deps import get_current_user
 from core.auth.guards import require_permission
@@ -54,7 +54,7 @@ class UpdateTemplateRequest(BaseModel):
 
 class ScheduleRuleRequest(BaseModel):
     template_id: str
-    schedule_type: str  # "once" | "range" | "open"
+    schedule_type: Literal["once", "range", "open"]
     start_date: Optional[_DateField] = None
     end_date: Optional[_DateField] = None
     weekdays: list[int] = []
@@ -64,6 +64,28 @@ class ScheduleRuleRequest(BaseModel):
     dc_title_override: Optional[str] = None
     dc_desc_override: Optional[str] = None
     dc_footer_override: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_mode_fields(self):
+        """Reject malformed rules before persistence (CWE-20).
+
+        Each schedule_type has required date fields; without this guard a
+        malformed rule was persisted and then crashed expand_schedule_rule().
+        """
+        if self.schedule_type == "once":
+            if self.date is None:
+                raise ValueError("schedule_type 'once' 需要 'date'")
+        elif self.schedule_type == "range":
+            if self.start_date is None or self.end_date is None:
+                raise ValueError("schedule_type 'range' 需要 'start_date' 與 'end_date'")
+            if self.end_date < self.start_date:
+                raise ValueError("'end_date' 不可早於 'start_date'")
+        elif self.schedule_type == "open":
+            if self.start_date is None:
+                raise ValueError("schedule_type 'open' 需要 'start_date'")
+        if any(d < 0 or d > 6 for d in self.weekdays):
+            raise ValueError("'weekdays' 元素須介於 0（週一）與 6（週日）之間")
+        return self
 
 
 async def _require_class_manage(class_id: str, user: User) -> None:
@@ -312,6 +334,7 @@ async def templates_list_page(
     class_id: str,
     teacher: User = Depends(require_permission(MANAGE_TASKS)),
 ):
+    await _require_class_manage(class_id, teacher)
     from tasks.templates.models import TaskTemplate as TT
     templates = await TT.find(TT.class_id == class_id).to_list()
     from core.classes.models import Class
@@ -329,6 +352,7 @@ async def template_form_page(
     error: str | None = None,
     teacher: User = Depends(require_permission(MANAGE_TASKS)),
 ):
+    await _require_class_manage(class_id, teacher)
     page_ctx = await build_page_context(teacher)
     return {**page_ctx, "class_id": class_id, "template": None, "error": error}
 
@@ -340,6 +364,7 @@ async def template_edit_page(
     template_id: str,
     teacher: User = Depends(require_permission(MANAGE_TASKS)),
 ):
+    await _require_template_class(template_id, teacher)
     from tasks.templates.models import TaskTemplate as TT
     tmpl = await TT.get(template_id)
     if tmpl is None:
@@ -355,6 +380,7 @@ async def template_assign_page(
     template_id: str,
     teacher: User = Depends(require_permission(MANAGE_TASKS)),
 ):
+    await _require_template_class(template_id, teacher)
     from tasks.templates.models import TaskTemplate as TT
     tmpl = await TT.get(template_id)
     if tmpl is None:

@@ -323,7 +323,10 @@ async def page_app(db):
     from fastapi import FastAPI
     from core.auth.router import router as auth_router
     from gamification.badges.router import router as badges_router
+    from gamification.leaderboard.router import router as leaderboard_router
+    from gamification.points.router import router as points_router
     from pages.router import router as pages_router
+    from tasks.checkin.router import router as checkin_router
     from tasks.submissions.router import router as submissions_router
     from tasks.templates.router import router as templates_router
     app = FastAPI()
@@ -332,6 +335,9 @@ async def page_app(db):
     app.include_router(badges_router)
     app.include_router(submissions_router)
     app.include_router(templates_router)
+    app.include_router(checkin_router)
+    app.include_router(leaderboard_router)
+    app.include_router(points_router)
     return app
 
 
@@ -364,6 +370,11 @@ async def page_template(db, page_teacher):
         invite_code="PAGE01",
     )
     await cls.insert()
+    # Teacher must be a class member for can_manage_class() to authorise the page (FINDING-001)
+    from core.classes.models import ClassMembership
+    await ClassMembership(
+        class_id=str(cls.id), user_id=str(page_teacher.id), role="teacher",
+    ).insert()
     return await create_template(
         name="Page Template",
         description="",

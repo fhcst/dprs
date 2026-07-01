@@ -11,6 +11,7 @@ from gamification.points.service import (
     award_points,
     deduct_points,
     get_balance,
+    get_class_balance,
     get_transaction_history,
     revoke_points,
 )
@@ -59,7 +60,7 @@ async def deduct_student_points(
         reason=body.reason,
         deducted_by=str(teacher.id),
     )
-    return {"deducted": abs(tx.amount), "new_balance": await get_balance(body.student_id)}
+    return {"deducted": abs(tx.amount), "new_balance": await get_class_balance(body.student_id, body.class_id)}
 
 
 @router.get("/students/me/points")
@@ -104,7 +105,7 @@ async def revoke_student_points(
         reason=body.reason,
         revoked_by=str(teacher.id),
     )
-    return {"deducted": abs(tx.amount), "new_balance": await get_balance(student_id)}
+    return {"deducted": abs(tx.amount), "new_balance": await get_class_balance(student_id, class_id)}
 
 
 @router.patch("/classes/{class_id}/point-config")
@@ -148,6 +149,10 @@ async def points_manage_page(
     if cls is None:
         raise HTTPException(status_code=404, detail="Class not found")
 
+    from core.classes.service import can_manage_class
+    if not await can_manage_class(teacher, cls):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     memberships = await ClassMembership.find(
         ClassMembership.class_id == class_id,
         ClassMembership.role == "student",
@@ -155,7 +160,7 @@ async def points_manage_page(
 
     members_data = []
     for m in memberships:
-        balance = await get_balance(m.user_id)
+        balance = await get_class_balance(m.user_id, class_id)
         u = await User.get(m.user_id)
         members_data.append({
             "student_id": m.user_id,

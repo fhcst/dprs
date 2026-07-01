@@ -43,6 +43,18 @@ async def test_balance_reflects_transactions(db, student):
     assert await get_balance(str(student.id)) == 15
 
 
+async def test_get_class_balance_is_class_scoped(db, student):
+    """get_class_balance counts only the given class's transactions (FINDING-002)."""
+    from gamification.points.service import award_points, get_balance, get_class_balance
+    await award_points(str(student.id), "clsA", 10, "checkin", "evtA")
+    await award_points(str(student.id), "clsB", 5, "checkin", "evtB")
+    # Global balance still sums across classes …
+    assert await get_balance(str(student.id)) == 15
+    # … but the class-scoped balance is isolated per class.
+    assert await get_class_balance(str(student.id), "clsA") == 10
+    assert await get_class_balance(str(student.id), "clsB") == 5
+
+
 # --- Award ---
 
 async def test_award_points_creates_transaction(db, student):

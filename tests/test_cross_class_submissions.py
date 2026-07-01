@@ -169,3 +169,31 @@ async def test_owner_teacher_can_approve_own_class_submission(cross_class_app):
         ac.cookies.set("access_token", _token(str(teacher_a.id), int(TEACHER)))
         resp = await ac.post(f"/api/submissions/{submission.id}/approve")
     assert resp.status_code == 200
+
+
+async def test_teacher_cannot_read_class_submissions_in_another_class(cross_class_app):
+    """Teacher B lists Alpha's submissions (not their class) — 403 (FINDING-001)."""
+    from httpx import AsyncClient, ASGITransport
+    from core.auth.permissions import TEACHER
+
+    app, teacher_a, teacher_b, cls_alpha, cls_beta, submission = cross_class_app
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        ac.cookies.set("access_token", _token(str(teacher_b.id), int(TEACHER)))
+        resp = await ac.get(f"/classes/{cls_alpha.id}/submissions")
+    assert resp.status_code == 403
+
+
+async def test_owner_teacher_can_read_own_class_submissions(cross_class_app):
+    """Teacher A lists Alpha's submissions (their own class) — 200 (FINDING-001)."""
+    from httpx import AsyncClient, ASGITransport
+    from core.auth.permissions import TEACHER
+
+    app, teacher_a, teacher_b, cls_alpha, cls_beta, submission = cross_class_app
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        ac.cookies.set("access_token", _token(str(teacher_a.id), int(TEACHER)))
+        resp = await ac.get(f"/classes/{cls_alpha.id}/submissions")
+    assert resp.status_code == 200

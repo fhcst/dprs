@@ -193,3 +193,29 @@ async def test_owner_teacher_can_deduct_points_in_own_class(cross_class_app):
     assert resp.status_code == 200
     data = resp.json()
     assert data["deducted"] == 5
+
+
+async def test_deduct_response_balance_is_class_scoped(cross_class_app):
+    """Deduct response new_balance reflects only this class, not the global total (FINDING-002)."""
+    from httpx import AsyncClient, ASGITransport
+    from core.auth.permissions import TEACHER
+    from gamification.points.service import award_points
+
+    app, ta, tb, student, cls_alpha, cls_beta = cross_class_app
+    # Student also has points in Beta — these must NOT surface in Alpha's response.
+    await award_points(str(student.id), str(cls_beta.id), 100, "submission", "beta_seed")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", _token(str(ta.id), int(TEACHER)))
+        resp = await ac.post(
+            "/api/points/deduct",
+            json={
+                "student_id": str(student.id),
+                "class_id": str(cls_alpha.id),
+                "amount": 5,
+                "reason": "test",
+            },
+        )
+    assert resp.status_code == 200
+    # Alpha balance = 20 seeded − 5 = 15; Beta's 100 must not leak into the response.
+    assert resp.json()["new_balance"] == 15
