@@ -95,3 +95,42 @@ async def test_put_system_config_requires_write_system(db, app):
         ac.cookies.set("access_token", token)
         resp = await ac.put("/admin/system", json={"site_name": "X", "admin_email": "x@x.com"})
     assert resp.status_code == 403
+
+
+async def test_post_setup_catch_all_does_not_leak_internal_error(db):
+    """POST /setup catch-all handler must not expose internal exception details in redirect URL."""
+    from fastapi import FastAPI
+    from core.system.router import router
+    from unittest.mock import AsyncMock, patch
+
+    setup_app = FastAPI()
+    setup_app.include_router(router)
+    # No system_config → not yet configured
+    setup_app.state.system_config = None
+    setup_app.state.redis = AsyncMock()
+
+    # Force SystemConfig.insert to raise an exception with a sensitive internal message
+    sensitive_message = "MongoError: connection refused to internal-host:27017"
+
+    async with AsyncClient(transport=ASGITransport(app=setup_app), base_url="http://test") as ac:
+        with patch("core.system.models.SystemConfig.insert", side_effect=Exception(sensitive_message)):
+            resp = await ac.post(
+                "/setup",
+                data={
+                    "site_name": "Test",
+                    "admin_username": "admin",
+                    "admin_password": "securepassword",
+                },
+                follow_redirects=False,
+            )
+
+    # Should redirect to setup page on error
+    assert resp.status_code == 302
+    location = resp.headers.get("location", "")
+    # The sensitive internal message must NOT appear in the redirect URL
+    assert sensitive_message not in location, (
+        f"Internal error message was leaked in redirect URL: {location}"
+    )
+    # Should contain a generic error message instead
+    assert "error=" in location
+    assert "An+internal+error+occurred." in location or "An internal error occurred." in location

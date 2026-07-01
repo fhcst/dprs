@@ -1,15 +1,20 @@
 """Setup wizard router and system config admin API."""
+import logging
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from core.auth.guards import require_permission
 from core.auth.password import hash_password
+from shared.limiter import limiter
 from core.auth.permissions import READ_SYSTEM, WRITE_SYSTEM
 from core.system.models import SystemConfig
 from core.users.models import User
 from shared.redis import SETUP_FLAG_KEY
 from shared.webpage import webpage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["setup"])
 
@@ -19,6 +24,7 @@ router = APIRouter(tags=["setup"])
 class SystemConfigUpdate(BaseModel):
     site_name: str
     admin_email: str
+    join_request_reject_cooldown_hours: int | None = None
 
 
 @router.get("/admin/system")
@@ -45,10 +51,21 @@ async def update_system_config(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="System not configured")
     config.site_name = body.site_name
     config.admin_email = body.admin_email
+    if body.join_request_reject_cooldown_hours is not None:
+        if body.join_request_reject_cooldown_hours < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="join_request_reject_cooldown_hours must be non-negative",
+            )
+        config.join_request_reject_cooldown_hours = body.join_request_reject_cooldown_hours
     await config.save()
     request.app.state.system_config = config
     webpage.webpage_context_update({"site_name": body.site_name})
-    return {"site_name": config.site_name, "admin_email": config.admin_email}
+    return {
+        "site_name": config.site_name,
+        "admin_email": config.admin_email,
+        "join_request_reject_cooldown_hours": config.join_request_reject_cooldown_hours,
+    }
 
 
 # ── Setup wizard ─────────────────────────────────────────────────────────────
@@ -66,6 +83,7 @@ async def get_setup(request: Request, error: str | None = None):
 
 
 @router.post("/setup")
+@limiter.limit("3/minute")
 @webpage.redirect(status_code=302)
 async def post_setup(
     request: Request,
@@ -105,7 +123,8 @@ async def post_setup(
         webpage.webpage_context_update({"site_name": site_name})
 
     except Exception as e:
-        error_url = request.url_for("setup_page").include_query_params(error=str(e))
+        logger.exception(e)
+        error_url = request.url_for("setup_page").include_query_params(error="An internal error occurred.")
         return (str(error_url), 302)
 
     return "/"

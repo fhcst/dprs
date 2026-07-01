@@ -810,11 +810,16 @@ tests:
 ---
 ### Requirement: Browser-based form login endpoint
 
-The system SHALL accept `POST /pages/login` with `application/x-www-form-urlencoded` body containing `username` and `password`. On success, it SHALL set the JWT cookie and redirect to `GET /pages/dashboard`. On failure, it SHALL redirect to `GET /pages/login?error=<message>`.
+The system SHALL accept `POST /pages/login` with `application/x-www-form-urlencoded` body containing `username`, `password`, and an optional `next` field. On failure, it SHALL redirect to `GET /pages/login?error=<message>` (HTTP 302) and SHALL NOT set the JWT cookie. On success, it SHALL set the HttpOnly JWT cookie and redirect (HTTP 302) to a post-login destination determined by validating `next` as follows:
+
+- The system SHALL treat a `next` value as a safe redirect target ONLY when it is a single same-origin relative path: it begins with exactly one `/` and does not escape the application origin.
+- BEFORE accepting `next`, the system SHALL inspect only the path/authority portion of the value — everything before the first `?` or `#` — and SHALL reject the value when that portion contains a backslash (`\`), begins with `//`, or contains a colon (`:`); the system SHALL also reject any value containing an ASCII control character. The authority checks SHALL deliberately exclude the query/fragment so that a colon or other reserved character appearing only in a query value (for example an ISO timestamp `?ts=2026-06-28T12:00:00`) does not cause a same-origin deep link to be silently dropped. Reaching an empty `urlsplit(next).netloc` alone SHALL NOT be treated as sufficient proof of safety, because an input such as `/\evil.com` yields an empty netloc yet still encodes an off-origin (protocol-relative) redirect once a browser normalizes `\` to `/`.
+- When `next` is present and passes validation, the system SHALL redirect to that exact relative path.
+- When `next` is absent, empty, or rejected by validation, the system SHALL redirect to `GET /pages/dashboard`.
 
 #### Scenario: Successful form login
 
-- **WHEN** a user submits valid credentials via the HTML login form at `POST /pages/login`
+- **WHEN** a user submits valid credentials via the HTML login form at `POST /pages/login` with no `next` field
 - **THEN** the system SHALL set an HttpOnly JWT cookie and redirect to `GET /pages/dashboard` (HTTP 302)
 
 #### Scenario: Invalid credentials via form
@@ -823,35 +828,42 @@ The system SHALL accept `POST /pages/login` with `application/x-www-form-urlenco
 - **THEN** the system SHALL redirect to `GET /pages/login?error=帳號或密碼錯誤` (HTTP 302)
 - **AND** the JWT cookie SHALL NOT be set
 
-<!-- @trace
-source: ui-pages-fastapi-webpage
-updated: 2026-03-18
--->
+#### Scenario: Successful login returns to a safe relative next
+
+- **WHEN** a user submits valid credentials with `next` set to a single same-origin relative path such as `/pages/settings`
+- **THEN** the system SHALL redirect (HTTP 302) to that exact relative path `/pages/settings`
+
+#### Scenario: Open-redirect vectors fall back to dashboard
+
+- **WHEN** a user submits valid credentials with `next` set to any of `//evil.com`, `/\evil.com`, `http://evil.com`, or `https://evil.com`
+- **THEN** the system SHALL ignore the `next` value and redirect (HTTP 302) to `GET /pages/dashboard`
+- **AND** the response `Location` header SHALL NOT contain `evil.com`
+
+#### Scenario: Colon in the query string round-trips
+
+- **WHEN** a user submits valid credentials with `next` set to a same-origin relative path whose query carries a colon, such as `/pages/dashboard?ts=2026-06-28T12:00:00`
+- **THEN** the system SHALL accept `next` and redirect (HTTP 302) to that exact relative path including its query string
+- **AND** the colon in the query SHALL NOT cause a fallback to `GET /pages/dashboard`
+
+##### Example: next validation outcomes
+
+| next input                              | Validation result | Redirect destination                    |
+| --------------------------------------- | ----------------- | --------------------------------------- |
+| `/pages/settings`                       | accepted          | `/pages/settings`                       |
+| `/pages/dashboard`                      | accepted          | `/pages/dashboard`                      |
+| `/pages/dashboard?ts=2026-06-28T12:00:00` | accepted        | `/pages/dashboard?ts=2026-06-28T12:00:00` |
+| `//evil.com`                            | rejected          | `/pages/dashboard`                      |
+| `/\evil.com`                            | rejected          | `/pages/dashboard`                      |
+| `http://evil.com`                       | rejected          | `/pages/dashboard`                      |
+| `https://evil.com`                      | rejected          | `/pages/dashboard`                      |
 
 
 <!-- @trace
-source: ui-pages-fastapi-webpage
-updated: 2026-03-18
+source: fix-login-next-redirect
+updated: 2026-06-29
 code:
-  - src/gamification/points/router.py
-  - src/gamification/leaderboard/router.py
-  - src/templates/student/dashboard.html
-  - src/templates/login.html
-  - src/core/auth/permissions.py
-  - src/main.py
-  - src/pages/deps.py
-  - src/gamification/badges/router.py
-  - src/templates/shared/base.html
-  - src/tasks/templates/router.py
-  - src/shared/webpage.py
-  - src/tasks/checkin/router.py
-  - src/tasks/submissions/router.py
-  - src/core/auth/router.py
-  - src/core/system/router.py
-  - src/pages/__init__.py
-  - src/templates/student/submit_task.html
   - src/pages/router.py
-  - src/community/feed/router.py
+  - src/pages/deps.py
 tests:
   - tests/test_pages.py
 -->
@@ -933,7 +945,241 @@ code:
 tests:
   - tests/test_pages.py
 -->
+
+---
+### Requirement: Auth cookies use Secure flag in production
+
+The system SHALL set `secure=True` on the `access_token` cookie when the deployment is production as determined by the shared `is_production()` helper — that is, when `FASTAPI_APP_ENVIRONMENT` normalizes to either `prod` or `production`. This applies to both the API login endpoint (`POST /auth/login`) and the form login endpoint (`POST /pages/login`), and to the session cookie issued by `SessionMiddleware`. In non-production environments, the `secure` flag MAY be omitted to allow HTTP-based local development.
+
+#### Scenario: Production login sets Secure cookie
+
+- **WHEN** a user successfully authenticates via `POST /auth/login` or `POST /pages/login` while `is_production()` is `True` (including `FASTAPI_APP_ENVIRONMENT=prod`)
+- **THEN** the `access_token` cookie SHALL include the `Secure` attribute
+
+#### Scenario: Non-production login omits Secure flag
+
+- **WHEN** a user successfully authenticates while `is_production()` is `False`
+- **THEN** the `access_token` cookie MAY omit the `Secure` attribute
+
+
+<!-- @trace
+source: harden-prod-secret-guard
+updated: 2026-07-01
+code:
+  - .understand-anything/fingerprints.json
+  - .understand-anything/intermediate/scan-result.json
+  - .understand-anything/config.json
+  - .understand-anything/knowledge-graph.json
+  - .understand-anything/.understandignore
+  - .understand-anything/meta.json
+-->
+
+---
+### Requirement: Rate limiting on authentication endpoints
+
+The system SHALL enforce rate limiting on authentication-related endpoints to prevent brute-force attacks. The following endpoints SHALL be rate-limited:
+- `POST /auth/login`
+- `POST /pages/login`
+- `POST /auth/change-password`
+- `POST /setup`
+
+When the rate limit is exceeded, the system SHALL return HTTP 429 (Too Many Requests).
+
+#### Scenario: Login rate limit exceeded
+
+- **WHEN** a client exceeds the rate limit on `POST /auth/login` or `POST /pages/login`
+- **THEN** the system SHALL return HTTP 429 and SHALL NOT attempt authentication
+
+#### Scenario: Requests within rate limit proceed normally
+
+- **WHEN** a client submits login requests within the allowed rate
+- **THEN** the system SHALL process authentication normally
+
+
+<!-- @trace
+source: security-hardening
+updated: 2026-03-25
+code:
+  - src/shared/sessions.py
+  - src/shared/limiter.py
+  - docker-compose.yml
+  - uv.lock
+  - src/core/system/router.py
+  - src/core/auth/router.py
+  - src/shared/csrf.py
+  - pyproject.toml
+  - src/core/auth/jwt.py
+  - src/main.py
+  - src/pages/router.py
+tests:
+  - tests/test_csrf.py
+  - tests/test_setup_startup.py
+  - tests/test_identity_tags.py
+  - tests/test_security_audit.py
+  - tests/test_rate_limiting.py
+  - tests/test_secure_cookie.py
+  - tests/test_sessions.py
+-->
+
+---
+### Requirement: CSRF protection on form POST endpoints
+
+The system SHALL validate the `Origin` or `Referer` header on form-based POST requests to prevent cross-site request forgery. If the header is present and does not match the application's expected origin, the system SHALL reject the request with HTTP 403.
+
+#### Scenario: Form POST with matching Origin accepted
+
+- **WHEN** a form POST request includes an `Origin` header matching the application host
+- **THEN** the system SHALL process the request normally
+
+#### Scenario: Form POST with mismatched Origin rejected
+
+- **WHEN** a form POST request includes an `Origin` header that does not match the application host
+- **THEN** the system SHALL return HTTP 403 and SHALL NOT process the form submission
+
+---
+### Requirement: Password hashing uses Argon2id
+
+The system SHALL hash all passwords using the Argon2id algorithm via the argon2-cffi library. The system SHALL use the library's default parameters, which conform to OWASP recommendations. The system SHALL NOT use bcrypt, passlib, or any other password hashing library.
+
+#### Scenario: New password is hashed with Argon2id
+
+- **WHEN** a user account is created or a password is changed
+- **THEN** the stored `hashed_password` SHALL be an Argon2id hash (prefixed with `$argon2id$`)
+
+#### Scenario: Password verification uses Argon2id
+
+- **WHEN** a user attempts to log in with a valid password
+- **THEN** the system SHALL verify the password against the Argon2id hash and grant access
+
+#### Scenario: Timing-safe dummy verification for unknown users
+
+- **WHEN** a login attempt is made with a username that does not exist
+- **THEN** the system SHALL perform a dummy Argon2id verification to prevent timing side-channel attacks (CWE-208)
+- **AND** the dummy hash SHALL be in Argon2id format to ensure consistent timing with real verifications
+
+---
+### Requirement: Login redirect preserves the requested page as a relative next
+
+When the page-auth dependency redirects an unauthenticated or unauthorized browser request to the login page, the system SHALL set the `next` query parameter to the originally requested RELATIVE target — the request path, plus the original query string when one is present — and SHALL NOT use the absolute request URL (no scheme, no host). This guarantees the stored `next` matches the single same-origin relative-path format enforced by the login endpoint's `next` validator, so a deep-linked page round-trips back to the user after a successful login.
+
+The system SHALL capture `next` ONLY for idempotent (GET) requests. Because the post-login redirect always replays `next` as a GET, a non-GET protected request (for example an unauthenticated or expired-session `POST /pages/settings/password`) SHALL omit `next` entirely, so login falls back to `GET /pages/dashboard` rather than replaying a GET against a POST-only route and surfacing `405 Method Not Allowed`.
+
+#### Scenario: Unauthenticated deep link stores a relative next
+
+- **WHEN** an unauthenticated browser requests a protected page such as `GET /pages/settings`
+- **THEN** the system SHALL redirect (HTTP 302) to the login page with `next` equal to the relative path `/pages/settings`
+- **AND** the `next` value SHALL NOT be an absolute `http://` or `https://` URL
+
+#### Scenario: Requested query string is preserved in next
+
+- **WHEN** an unauthenticated browser requests a protected page that carries a query string, such as `GET /pages/dashboard?create_class=1`
+- **THEN** the stored `next` SHALL include both the path and the original query string, i.e. `/pages/dashboard?create_class=1`
+
+#### Scenario: Deep link round-trips after login
+
+- **WHEN** a user is redirected to login from a protected page and then submits valid credentials together with the preserved relative `next`
+- **THEN** the system SHALL redirect (HTTP 302) the user back to the originally requested page rather than to the dashboard
+
+#### Scenario: Non-GET protected request does not capture next
+
+- **WHEN** an unauthenticated or expired-session browser submits a non-GET request to a protected endpoint, such as `POST /pages/settings/password`
+- **THEN** the system SHALL redirect (HTTP 302) to the login page WITHOUT a `next` query parameter (the POST-only path SHALL NOT be stored)
+- **AND** a subsequent successful login SHALL fall back to `GET /pages/dashboard` instead of replaying a GET against the POST-only route (which would return `405 Method Not Allowed`)
+
+---
+### Requirement: Single source of truth for production environment detection
+
+The system SHALL determine whether it is running in a production deployment through a single shared helper `is_production()` rather than through inline string comparisons scattered across modules. The helper SHALL normalize the `FASTAPI_APP_ENVIRONMENT` environment variable by trimming surrounding whitespace and lower-casing it, and SHALL treat the deployment as production WHEN the normalized value is either `prod` or `production`. All other values — including `dev`, `development`, `staging`, and an unset variable — SHALL be treated as non-production. The helper SHALL read the environment variable at call time (not at module import time) so that tests can override it.
+
+All previously inline production checks — in JWT secret validation, the auth router, the pages router, and the session middleware — SHALL resolve to this single helper, so that every consumer agrees on what counts as production.
+
+#### Scenario: prod and production both detected as production
+
+- **WHEN** `is_production()` is evaluated with `FASTAPI_APP_ENVIRONMENT` set to `prod`, `production`, or `PROD`
+- **THEN** the helper SHALL return `True`
+
+#### Scenario: Development and unset are non-production
+
+- **WHEN** `is_production()` is evaluated with `FASTAPI_APP_ENVIRONMENT` set to `dev`, set to `development`, or not set at all
+- **THEN** the helper SHALL return `False`
+
+##### Example: environment normalization outcomes
+
+| `FASTAPI_APP_ENVIRONMENT` | `is_production()` |
+| ------------------------- | ----------------- |
+| `prod`                    | `True`            |
+| `production`              | `True`            |
+| `PROD`                    | `True`            |
+| `  production  `          | `True`            |
+| `dev`                     | `False`           |
+| `development`             | `False`           |
+| `staging`                 | `False`           |
+| (unset)                   | `False`           |
+
 ## ADDED Requirements
+
+
+<!-- @trace
+source: security-hardening
+updated: 2026-03-25
+code:
+  - src/shared/sessions.py
+  - src/shared/limiter.py
+  - docker-compose.yml
+  - uv.lock
+  - src/core/system/router.py
+  - src/core/auth/router.py
+  - src/shared/csrf.py
+  - pyproject.toml
+  - src/core/auth/jwt.py
+  - src/main.py
+  - src/pages/router.py
+tests:
+  - tests/test_csrf.py
+  - tests/test_setup_startup.py
+  - tests/test_identity_tags.py
+  - tests/test_security_audit.py
+  - tests/test_rate_limiting.py
+  - tests/test_secure_cookie.py
+  - tests/test_sessions.py
+-->
+
+
+<!-- @trace
+source: migrate-to-argon2-cffi
+updated: 2026-04-04
+code:
+  - pyproject.toml
+  - uv.lock
+  - src/core/auth/local_provider.py
+  - src/core/auth/password.py
+tests:
+  - tests/test_auth.py
+-->
+
+
+<!-- @trace
+source: fix-login-next-redirect
+updated: 2026-06-29
+code:
+  - src/pages/router.py
+  - src/pages/deps.py
+tests:
+  - tests/test_pages.py
+-->
+
+
+<!-- @trace
+source: harden-prod-secret-guard
+updated: 2026-07-01
+code:
+  - .understand-anything/fingerprints.json
+  - .understand-anything/intermediate/scan-result.json
+  - .understand-anything/config.json
+  - .understand-anything/knowledge-graph.json
+  - .understand-anything/.understandignore
+  - .understand-anything/meta.json
+-->
 
 ### Requirement: JWT secret safety check at startup
 
@@ -957,3 +1203,61 @@ code:
 tests:
   - tests/test_security_audit.py
 -->
+
+<!-- @trace
+source: security-hardening
+updated: 2026-03-25
+code:
+  - src/shared/sessions.py
+  - src/shared/limiter.py
+  - docker-compose.yml
+  - uv.lock
+  - src/core/system/router.py
+  - src/core/auth/router.py
+  - src/shared/csrf.py
+  - pyproject.toml
+  - src/core/auth/jwt.py
+  - src/main.py
+  - src/pages/router.py
+tests:
+  - tests/test_csrf.py
+  - tests/test_setup_startup.py
+  - tests/test_identity_tags.py
+  - tests/test_security_audit.py
+  - tests/test_rate_limiting.py
+  - tests/test_secure_cookie.py
+  - tests/test_sessions.py
+-->
+
+
+<!-- @trace
+source: harden-prod-secret-guard
+updated: 2026-07-01
+code:
+  - .understand-anything/fingerprints.json
+  - .understand-anything/intermediate/scan-result.json
+  - .understand-anything/config.json
+  - .understand-anything/knowledge-graph.json
+  - .understand-anything/.understandignore
+  - .understand-anything/meta.json
+-->
+
+### Requirement: Password hashing uses Argon2id
+
+The system SHALL hash all passwords using the Argon2id algorithm via the argon2-cffi library. The system SHALL use the library's default parameters, which conform to OWASP recommendations. The system SHALL NOT use bcrypt, passlib, or any other password hashing library.
+
+#### Scenario: New password is hashed with Argon2id
+
+- **WHEN** a user account is created or a password is changed
+- **THEN** the stored `hashed_password` SHALL be an Argon2id hash (prefixed with `$argon2id$`)
+
+#### Scenario: Password verification uses Argon2id
+
+- **WHEN** a user attempts to log in with a valid password
+- **THEN** the system SHALL verify the password against the Argon2id hash and grant access
+
+#### Scenario: Timing-safe dummy verification for unknown users
+
+- **WHEN** a login attempt is made with a username that does not exist
+- **THEN** the system SHALL perform a dummy Argon2id verification to prevent timing side-channel attacks (CWE-208)
+- **AND** the dummy hash SHALL be in Argon2id format to ensure consistent timing with real verifications

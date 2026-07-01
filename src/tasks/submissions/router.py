@@ -152,6 +152,12 @@ async def class_submissions(
     date_param: date | None = None,
     teacher: User = Depends(require_permission(MANAGE_TASKS)),
 ):
+    from core.classes.models import Class
+    from core.classes.service import can_manage_class
+    cls = await Class.get(class_id)
+    if cls is None or not await can_manage_class(teacher, cls):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+
     target = date_param or date.today()
     subs = await get_class_submissions_for_date(class_id, target)
     return [
@@ -177,6 +183,10 @@ async def submission_review_page(
     cls = await Class.get(class_id)
     if cls is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    from core.classes.service import can_manage_class
+    if not await can_manage_class(teacher, cls):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
 
     all_subs = await TaskSubmission.find(
         TaskSubmission.class_id == class_id
@@ -426,7 +436,15 @@ async def submit_task_page(
     points: int | None = None,
     current_user: User = Depends(get_page_user),
 ):
+    from core.classes.models import ClassMembership
     from tasks.templates.service import get_template_for_date
+
+    membership = await ClassMembership.find_one(
+        ClassMembership.class_id == class_id,
+        ClassMembership.user_id == str(current_user.id),
+    )
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="非此班級成員")
 
     today_template = await get_template_for_date(class_id, date.today())
     if today_template is None:

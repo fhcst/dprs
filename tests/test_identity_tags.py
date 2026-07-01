@@ -233,7 +233,7 @@ async def test_csv_import_new_format_creates_user_with_identity_tag(db, admin_ap
     from core.users.models import User, IdentityTag
     _, token = await _make_user(int(SITE_ADMIN))
     csv_data = _make_new_csv(
-        ["stu1", "pw", "Stu1", "陳小明", "stu@school.edu", "student", "STUDENT", "", "302班", "5"]
+        ["stu1", "password123", "Stu1", "陳小明", "stu@school.edu", "student", "STUDENT", "", "302班", "5"]
     )
     async with AsyncClient(transport=ASGITransport(app=admin_app), base_url="http://test") as ac:
         ac.cookies.set("access_token", token)
@@ -252,7 +252,7 @@ async def test_csv_import_skips_invalid_identity_tag(db, admin_app):
     from core.auth.permissions import SITE_ADMIN
     _, token = await _make_user(int(SITE_ADMIN))
     csv_data = _make_new_csv(
-        ["u2", "pw", "U2", "Name", "e@e.com", "robot", "STUDENT", "", "", ""]
+        ["u2", "password123", "U2", "Name", "e@e.com", "robot", "STUDENT", "", "", ""]
     )
     async with AsyncClient(transport=ASGITransport(app=admin_app), base_url="http://test") as ac:
         ac.cookies.set("access_token", token)

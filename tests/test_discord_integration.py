@@ -107,7 +107,7 @@ async def test_send_task_embed_posts_correct_payload():
     embeds = payload["embeds"]
     assert len(embeds) == 1
     embed = embeds[0]
-    assert embed["title"] == "每日練習"
+    assert embed["title"] == "每日練習 — 2026-03-21"
     assert embed["color"] == 0x7C3AED
 
 

@@ -43,7 +43,7 @@ def register_auth_provider():
 
 async def _make_full_db(db_name: str):
     """Initialise mongomock with all models needed for these tests."""
-    from core.classes.models import Class, ClassMembership
+    from core.classes.models import Class, ClassMembership, JoinRequest
     from core.users.models import User
     from gamification.badges.models import BadgeAward, BadgeDefinition
     from gamification.points.models import ClassPointConfig, PointTransaction
@@ -56,7 +56,7 @@ async def _make_full_db(db_name: str):
     await init_beanie(
         database=db,
         document_models=[
-            User, Class, ClassMembership,
+            User, Class, ClassMembership, JoinRequest,
             TaskTemplate, TaskAssignment, TaskScheduleRule, TaskSubmission,
             CheckinConfig, DailyCheckinOverride, CheckinRecord,
             PointTransaction, ClassPointConfig,
@@ -485,3 +485,40 @@ async def test_teacher_dashboard_shows_member_count(teacher_dashboard_app):
     nearby = content[max(0, idx - 200):idx]
     assert "\u2014".encode() not in nearby, \
         "member_count shows '—' placeholder — member_count not computed in dashboard_page"
+
+
+# ─── Membership guard regression: submit page (fix-submit-page-membership-check) ─
+
+@pytest.fixture
+async def non_member_submit_app():
+    client = await _make_full_db("test_non_member_submit")
+    from core.classes.models import Class
+    from core.users.models import User
+
+    student = User(username="nm_submit_s", hashed_password="x",
+                   display_name="NmSubmitS", permissions=int(STUDENT))
+    await student.insert()
+
+    cls = Class(name="NonMemberClass", description="", visibility="private",
+                owner_id="o", invite_code="NM001")
+    await cls.insert()
+    # Intentionally no ClassMembership for student
+
+    yield _make_app(), student, cls
+    client.close()
+
+
+async def test_submit_page_non_member_gets_403_not_class_content(non_member_submit_app):
+    """Non-member requesting GET /pages/student/classes/{class_id}/submit must receive
+    HTTP 403 — NOT class-specific page content such as '今日無任務模板'.
+    Regression for: fix-submit-page-membership-check"""
+    app, student, cls = non_member_submit_app
+    cookies = _cookies(str(student.id), int(STUDENT))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test",
+                           cookies=cookies) as ac:
+        resp = await ac.get(f"/pages/student/classes/{cls.id}/submit",
+                            follow_redirects=False)
+    assert resp.status_code == 403, \
+        f"Non-member submit page must return 403, got {resp.status_code}: {resp.text[:200]}"
+    assert "今日無任務模板".encode() not in resp.content, \
+        "403 response must NOT reveal the 'no template today' message to non-members"

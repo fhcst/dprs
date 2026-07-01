@@ -719,6 +719,36 @@ updated: 2026-03-19
 -->
 
 ---
+### Requirement: Template modification requires class management permission
+
+The system SHALL verify that the requesting user can manage the class a template belongs to before allowing update, delete, archive, or unarchive operations. The system SHALL load the template, retrieve its `class_id`, load the corresponding Class document, and call `can_manage_class(user, cls)`. If the user cannot manage the class, the system SHALL return HTTP 403.
+
+#### Scenario: Teacher modifies template in own class
+
+- **WHEN** a teacher with `MANAGE_TASKS` permission and teacher membership in class C calls `PATCH /templates/{template_id}` for a template belonging to class C
+- **THEN** the system SHALL proceed with the update normally
+
+#### Scenario: Teacher modifies template in another class
+
+- **WHEN** a teacher with `MANAGE_TASKS` permission but no membership in class C calls `PATCH /templates/{template_id}` for a template belonging to class C
+- **THEN** the system SHALL return HTTP 403
+
+#### Scenario: Class manager modifies any template
+
+- **WHEN** a user with `MANAGE_ALL_CLASSES` permission calls `PATCH /templates/{template_id}` for any template
+- **THEN** the system SHALL proceed with the update normally
+
+#### Scenario: Teacher deletes template in another class
+
+- **WHEN** a teacher with `MANAGE_TASKS` permission but no membership in class C calls `DELETE /templates/{template_id}` for a template belonging to class C
+- **THEN** the system SHALL return HTTP 403
+
+<!-- @trace
+source: fix-cross-class-access-control
+updated: 2026-03-24
+-->
+
+---
 ### Requirement: Task assignment form includes Discord sync option
 
 The task assignment form SHALL include a checkbox "同步到 Discord" that is visible only when the class has a configured Webhook URL.
@@ -754,3 +784,23 @@ code:
 tests:
   - tests/test_discord_integration.py
 -->
+
+---
+### Requirement: Teacher template pages enforce class management
+
+The teacher template pages SHALL enforce class-management authorization on the class derived from the URL. Class-scoped pages (`templates_list_page`, `template_form_page` under `/pages/teacher/classes/{class_id}/templates...`) SHALL require `can_manage_class()` on `class_id`; template-scoped pages (`template_edit_page`, `template_assign_page` under `/pages/teacher/templates/{template_id}/...`) SHALL resolve the template's class and require `can_manage_class()` on it. A teacher who does not manage the class SHALL receive HTTP 403 before any template definition, invite code, or Discord-webhook metadata is disclosed.
+
+#### Scenario: Non-managing teacher lists another class's templates
+
+- **WHEN** a teacher who does not manage the class requests its templates list page
+- **THEN** the system SHALL return HTTP 403 and SHALL NOT disclose template definitions
+
+#### Scenario: Non-managing teacher opens a template edit or assign page
+
+- **WHEN** a teacher requests the edit or assign page for a template whose class they do not manage
+- **THEN** the system SHALL return HTTP 403 and SHALL NOT disclose the template or its class's Discord-webhook presence
+
+#### Scenario: Managing teacher opens their own template pages
+
+- **WHEN** a teacher who manages the class requests any of these pages
+- **THEN** the system SHALL render the page normally

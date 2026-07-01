@@ -1,24 +1,13 @@
 schema: spec-driven
-locale: tw
-tdd: true
-parallel_tasks: true
-audit: true
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+context: |
+  Tech stack: Python 3.13+, FastAPI, Beanie (async MongoDB ODM), MongoDB 8.0, Redis 7
+  DSL Engine: Rust (pest PEG parser), compiled to WASM (wasm-pack) for frontend validation
+  and to Python extension (PyO3 / maturin) for server-side evaluation
+  Package manager: uv
+  Testing: pytest + pytest-asyncio + mongomock-motor + fakeredis
+  Container: Docker + Docker Compose
+  Language: Traditional Chinese (繁體中文) for all AI-generated artifacts
+  Conventions: kebab-case change names, spec files in English (SHALL/MUST), artifacts in 繁體中文
+  Domain: educational platform — teachers manage classes, assign tasks, review submissions;
+  students submit daily practice reports and earn gamification rewards (points, badges, leaderboard)

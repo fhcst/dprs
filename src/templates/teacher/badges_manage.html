@@ -1,0 +1,763 @@
+{% extends "shared/base.html" %}
+{% block title %}徽章管理 — {{ class_name }}{% endblock %}
+
+{% block head_extra %}
+{# ── CodeMirror 6 (ESM from CDN via importmap) ── #}
+<script type="importmap">
+{
+  "imports": {
+    "codemirror": "https://esm.sh/codemirror@6.0.1",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.36.8",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.5.2",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.11.0",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.8.1",
+    "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.18.6",
+    "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.8.5",
+    "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1",
+    "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.3.2",
+    "@lezer/markdown": "https://esm.sh/@lezer/markdown@1.4.3"
+  }
+}
+</script>
+<style>
+  /* CodeMirror editor chrome */
+  .cm-editor { height: auto; min-height: 120px; font-size: 14px; border-radius: 0 0 8px 8px; }
+  .cm-editor .cm-content { padding: 12px 16px; }
+  .cm-editor.cm-focused { outline: 2px solid rgb(139 92 246); outline-offset: -1px; }
+  /* gutter 配色跟隨容器背景 */
+  .cm-editor .cm-gutters { background: transparent; border-right: 1px solid #e5e7eb; color: #9ca3af; }
+  .dark .cm-editor .cm-gutters { border-right-color: #374151; color: #6b7280; }
+
+  /* G2 dual-zone separator */
+  .g2-auto-zone {
+    background: linear-gradient(135deg, rgba(139,92,246,0.04), rgba(139,92,246,0.08));
+    border: 1px solid rgba(139,92,246,0.18);
+  }
+  .dark .g2-auto-zone {
+    background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(139,92,246,0.12));
+    border-color: rgba(139,92,246,0.25);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="font-heading font-bold text-2xl text-gray-900 dark:text-gray-100">徽章管理</h1>
+  <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">班級：<strong class="text-gray-700 dark:text-gray-300">{{ class_name }}</strong></p>
+</div>
+
+{# ── Create / Edit Badge Form ─────────────────────────────────────────────── #}
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200" id="form-title">新增徽章</h2>
+    <button type="button" id="badge-help-btn" title="徽章設定說明" aria-label="開啟徽章設定說明"
+            class="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150 cursor-pointer text-sm font-medium">
+      ?
+    </button>
+  </div>
+
+  <form id="badge-form">
+    <input type="hidden" id="badge-id" value="">
+
+    {# ── Row 1: Name + Icon ── #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">徽章名稱</label>
+        <input type="text" id="badge-name" required placeholder="例：連續打卡達人"
+               class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">圖示（Emoji）</label>
+        <input type="text" id="badge-icon" value="" placeholder="🏅" maxlength="8"
+               class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 text-center focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+      </div>
+    </div>
+
+    {# ── Row 2: Trigger source selector ── #}
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">觸發來源</label>
+      <div class="flex flex-wrap gap-4">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="trigger_source" value="manual" checked
+                 class="w-4 h-4 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+          <span class="text-sm text-gray-700 dark:text-gray-300">手動頒發</span>
+        </label>
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="trigger_source" value="trigger_key"
+                 class="w-4 h-4 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+          <span class="text-sm text-gray-700 dark:text-gray-300">內建觸發器 (trigger_key)</span>
+        </label>
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="trigger_source" value="trigger_rule_id"
+                 class="w-4 h-4 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+          <span class="text-sm text-gray-700 dark:text-gray-300">DSL 觸發規則 (trigger_rule_id)</span>
+        </label>
+      </div>
+    </div>
+
+    {# ── Conditional: trigger_key input ── #}
+    <div id="trigger-key-section" class="hidden mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">觸發器鍵值</label>
+      <input type="text" id="trigger-key-input" placeholder="例：checkin_streak_7"
+             class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+    </div>
+
+    {# ── Conditional: trigger_rule_id dropdown ── #}
+    <div id="trigger-rule-section" class="hidden mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">選擇 DSL 觸發規則</label>
+      <select id="trigger-rule-select"
+              class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow duration-150">
+        <option value="">— 請選擇規則 —</option>
+        {% for r in trigger_rules %}
+        <option value="{{ r.id }}" data-expression="{{ r.expression }}">{{ r.name }}（{{ r.expression[:60] }}{% if r.expression|length > 60 %}…{% endif %}）</option>
+        {% endfor %}
+      </select>
+      {% if not trigger_rules %}
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        尚無觸發規則 —
+        <a href="{{ url_for('trigger_rules_page', class_id=class_id) }}" class="text-brand-600 dark:text-brand-400 hover:underline">前往建立</a>
+      </p>
+      {% endif %}
+    </div>
+
+    {# ── Row 3: Description with G2 dual-zone layout ── #}
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">徽章說明</label>
+
+      <div class="rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-transparent transition-shadow duration-150">
+        {# ── G2 Upper Zone: auto-generated condition summary (visible only when rule bound) ── #}
+        <div id="g2-auto-zone" class="hidden g2-auto-zone px-4 py-3">
+          <div class="flex items-center gap-2 mb-1.5">
+            <svg class="w-4 h-4 text-brand-500 dark:text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+            </svg>
+            <span class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wide">自動產生的觸發條件摘要</span>
+          </div>
+          <p id="g2-auto-text" class="text-sm text-gray-700 dark:text-gray-300 font-mono leading-relaxed"></p>
+        </div>
+
+        {# ── G2 Separator (visible only when auto-zone is shown) ── #}
+        <div id="g2-separator" class="hidden border-t border-brand-200 dark:border-brand-800"></div>
+
+        {# ── G2 Lower Zone: CodeMirror Markdown editor ── #}
+        <div id="milkdown-editor" class="bg-white dark:bg-gray-800"></div>
+      </div>
+      <input type="hidden" id="badge-description" value="">
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">支援 Markdown 格式：粗體、列表、引用等</p>
+    </div>
+
+    {# ── Actions ── #}
+    <div class="flex items-center gap-3">
+      <button type="submit" id="save-btn"
+              class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors duration-150 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        <span id="save-btn-text">建立徽章</span>
+      </button>
+      <button type="button" id="cancel-edit-btn" class="hidden text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer">取消編輯</button>
+    </div>
+  </form>
+</div>
+
+{# ── Existing Badges List ─────────────────────────────────────────────────── #}
+<div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+  <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+    <h2 class="font-heading font-semibold text-base text-gray-800 dark:text-gray-200">已建立的徽章</h2>
+  </div>
+
+  {% if badges %}
+  <div class="divide-y divide-gray-100 dark:divide-gray-800">
+    {% for b in badges %}
+    <div class="px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+         data-badge-id="{{ b.id }}">
+      {# ── Left: clickable info area ── #}
+      <div class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+           onclick="openBadgeDetail('{{ b.id }}')">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900 dark:to-brand-800 flex items-center justify-center text-xl shrink-0 ring-2 ring-brand-100 dark:ring-brand-900">
+          {{ b.icon }}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-sm text-gray-900 dark:text-gray-100">{{ b.name }}</span>
+            {% if b.trigger_key %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">觸發器：{{ b.trigger_key }}</span>
+            {% elif b.trigger_rule_id %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400">DSL 規則</span>
+            {% else %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">手動</span>
+            {% endif %}
+            <span class="award-count-badge inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">{{ b.award_count }} 人獲得</span>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ b.description[:80] }}{% if b.description|length > 80 %}…{% endif %}</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button"
+                onclick="editBadge({{ b | tojson }})"
+                class="text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer" title="編輯">
+          <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
+        </button>
+        {% if b.award_count == 0 %}
+        <button type="button"
+                onclick="deleteBadge('{{ b.id }}', '{{ b.name }}')"
+                class="text-gray-400 hover:text-red-500 cursor-pointer" title="刪除">
+          <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+          </svg>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="px-5 py-10 text-center">
+    <p class="text-sm text-gray-500 dark:text-gray-400">尚未建立任何徽章</p>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">使用上方的表單來建立您的第一個徽章</p>
+  </div>
+  {% endif %}
+</div>
+
+{# Badge Detail Modal — rendered via Modal.dialog() in JS #}
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+// ── CodeMirror 6 Markdown Editor ────────────────────────────────────────────
+import { EditorView, basicSetup } from 'codemirror';
+import { markdown } from '@codemirror/lang-markdown';
+
+// ── DSL WASM module (lazy-loaded for describe()) ────────────────────────────
+let dsl = null;
+async function loadWasm() {
+  if (dsl) return dsl;
+  try {
+    const mod = await import('/static/dsl-engine/dsl_engine.js');
+    await mod.default();
+    dsl = mod;
+  } catch (e) {
+    console.warn('DSL WASM not available, will show raw expression:', e);
+  }
+  return dsl;
+}
+loadWasm();
+
+// ── Constants ───────────────────────────────────────────────────────────────
+const CLASS_ID = "{{ class_id }}";
+const API_BASE = `/classes/${CLASS_ID}/badges`;
+
+// ── CodeMirror init ──────────────────────────────────────────────────────────
+let view = null;
+
+function initCodeMirror(initialValue = '') {
+  const mount = document.getElementById('milkdown-editor');
+  if (view) {
+    view.destroy();
+  }
+  view = new EditorView({
+    doc: initialValue,
+    extensions: [basicSetup, markdown()],
+    parent: mount,
+  });
+}
+
+function getEditorMarkdown() {
+  if (!view) return '';
+  return view.state.doc.toString();
+}
+
+function setEditorMarkdown(md) {
+  if (!view) {
+    initCodeMirror(md);
+    return;
+  }
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: md },
+  });
+}
+
+initCodeMirror('');
+
+// ── Trigger source radio switching ──────────────────────────────────────────
+const triggerRadios = document.querySelectorAll('input[name="trigger_source"]');
+const triggerKeySection = document.getElementById('trigger-key-section');
+const triggerRuleSection = document.getElementById('trigger-rule-section');
+const g2AutoZone = document.getElementById('g2-auto-zone');
+const g2Separator = document.getElementById('g2-separator');
+const g2AutoText = document.getElementById('g2-auto-text');
+const triggerRuleSelect = document.getElementById('trigger-rule-select');
+
+function updateTriggerSections() {
+  const selected = document.querySelector('input[name="trigger_source"]:checked').value;
+
+  triggerKeySection.classList.toggle('hidden', selected !== 'trigger_key');
+  triggerRuleSection.classList.toggle('hidden', selected !== 'trigger_rule_id');
+
+  if (selected === 'trigger_rule_id') {
+    updateG2Zone();
+  } else {
+    g2AutoZone.classList.add('hidden');
+    g2Separator.classList.add('hidden');
+  }
+}
+
+triggerRadios.forEach(r => r.addEventListener('change', updateTriggerSections));
+
+// ── G2 auto-description generation ──────────────────────────────────────────
+function updateG2Zone() {
+  const opt = triggerRuleSelect.selectedOptions[0];
+  if (!opt || !opt.value) {
+    g2AutoZone.classList.add('hidden');
+    g2Separator.classList.add('hidden');
+    return;
+  }
+
+  const expression = opt.dataset.expression || '';
+  let summary = expression;
+
+  // Try WASM describe() for human-readable summary
+  if (dsl && typeof dsl.describe === 'function') {
+    try {
+      summary = dsl.describe(expression);
+    } catch {
+      // Fallback to raw expression
+    }
+  }
+
+  g2AutoText.textContent = summary;
+  g2AutoZone.classList.remove('hidden');
+  g2Separator.classList.remove('hidden');
+}
+
+triggerRuleSelect.addEventListener('change', updateG2Zone);
+
+// ── Form submission (Create / Update) ───────────────────────────────────────
+document.getElementById('badge-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const id = document.getElementById('badge-id').value;
+  const name = document.getElementById('badge-name').value.trim();
+  const icon = document.getElementById('badge-icon').value.trim() || '\u{1F3C5}';
+  const description = getEditorMarkdown().trim();
+  const triggerSource = document.querySelector('input[name="trigger_source"]:checked').value;
+
+  if (!name) { Modal.alert('請輸入徽章名稱'); return; }
+  if (!description) { Modal.alert('請輸入徽章說明'); return; }
+
+  const payload = { name, description, icon };
+
+  if (triggerSource === 'trigger_key') {
+    const key = document.getElementById('trigger-key-input').value.trim();
+    if (!key) { Modal.alert('請輸入觸發器鍵值'); return; }
+    payload.trigger_key = key;
+  } else if (triggerSource === 'trigger_rule_id') {
+    const ruleId = triggerRuleSelect.value;
+    if (!ruleId) { Modal.alert('請選擇 DSL 觸發規則'); return; }
+    payload.trigger_rule_id = ruleId;
+  }
+
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `${API_BASE}/${id}` : API_BASE;
+  const saveBtn = document.getElementById('save-btn');
+
+  await withLoading(saveBtn, async () => {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Toast.error(err.detail || '操作失敗');
+        return;
+      }
+      Toast.success(id ? '徽章已更新' : '徽章已建立');
+      location.reload();
+    } catch (err) {
+      Toast.error('網路錯誤，請稍後重試');
+    }
+  });
+});
+
+// ── Edit badge (populate form) ──────────────────────────────────────────────
+window.editBadge = function(badge) {
+  document.getElementById('badge-id').value = badge.id;
+  document.getElementById('badge-name').value = badge.name;
+  document.getElementById('badge-icon').value = badge.icon;
+
+  // Set trigger source radio
+  let source = 'manual';
+  if (badge.trigger_key) source = 'trigger_key';
+  else if (badge.trigger_rule_id) source = 'trigger_rule_id';
+
+  document.querySelectorAll('input[name="trigger_source"]').forEach(r => {
+    r.checked = r.value === source;
+  });
+
+  if (source === 'trigger_key') {
+    document.getElementById('trigger-key-input').value = badge.trigger_key || '';
+  } else if (source === 'trigger_rule_id') {
+    triggerRuleSelect.value = badge.trigger_rule_id || '';
+  }
+
+  updateTriggerSections();
+  setEditorMarkdown(badge.description || '');
+
+  document.getElementById('form-title').textContent = '編輯徽章';
+  document.getElementById('save-btn-text').textContent = '更新徽章';
+  document.getElementById('cancel-edit-btn').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+// ── Cancel edit ─────────────────────────────────────────────────────────────
+document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+  document.getElementById('badge-id').value = '';
+  document.getElementById('badge-name').value = '';
+  document.getElementById('badge-icon').value = '';
+  document.getElementById('trigger-key-input').value = '';
+  triggerRuleSelect.value = '';
+
+  document.querySelectorAll('input[name="trigger_source"]').forEach(r => {
+    r.checked = r.value === 'manual';
+  });
+  updateTriggerSections();
+  setEditorMarkdown('');
+
+  document.getElementById('form-title').textContent = '新增徽章';
+  document.getElementById('save-btn-text').textContent = '建立徽章';
+  document.getElementById('cancel-edit-btn').classList.add('hidden');
+});
+
+// ── Delete badge ────────────────────────────────────────────────────────────
+window.deleteBadge = function(id, name) {
+  const deleteBtn = document.querySelector(`[data-badge-id="${id}"] button[title="刪除"]`);
+  Modal.confirm(`確定要刪除徽章「${name}」嗎？此操作無法復原。`, async () => {
+    const doDelete = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          Toast.error(err.detail || '刪除失敗');
+          return;
+        }
+        Toast.success('徽章已刪除');
+        location.reload();
+      } catch (err) {
+        Toast.error('網路錯誤');
+      }
+    };
+    if (deleteBtn) {
+      await withLoading(deleteBtn, doDelete);
+    } else {
+      await doDelete();
+    }
+  });
+};
+
+// ── Badge Detail Modal (via Modal.dialog) ────────────────────────────────────
+
+let detailCurrentBadgeId = null;
+// Stable identity for the badge-detail dialog so async refreshes can confirm it is
+// still the top modal (via Modal.topId()) before painting into the shared body.
+const DETAIL_MODAL_ID = 'badge-detail';
+
+window.openBadgeDetail = async function(badgeId) {
+  detailCurrentBadgeId = badgeId;
+
+  // Show the modal immediately with loading state
+  Modal.dialog({
+    id: DETAIL_MODAL_ID,
+    title: '徽章詳情',
+    content: '<p class="text-sm text-gray-400 dark:text-gray-500">載入中…</p>',
+    confirmText: '關閉',
+    maxWidth: 'max-w-xl',
+  });
+
+  await refreshBadgeDetail();
+};
+
+async function refreshBadgeDetail() {
+  if (!detailCurrentBadgeId) return;
+  try {
+    const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/detail`);
+    if (!res.ok) { showDetailError('載入失敗，請重試'); return; }
+    const data = await res.json();
+    renderDetailModal(data);
+  } catch {
+    showDetailError('網路錯誤');
+  }
+}
+
+// Surface a detail load/refresh error WITHOUT stacking a Modal.alert on top of the
+// still-open badge-detail dialog. Under the nested-modal stacking model an alert
+// opened while the detail dialog is the top modal gets pushed ON TOP of it; once the
+// user dismisses the alert the detail snapshot is restored — leaving a ghost
+// '載入中…' (initial-load failure) or a stale list (post-revoke refresh failure) that
+// must be dismissed a SECOND time. Instead, when the detail dialog is the top modal
+// we render the error inline in its body so a single '關閉' closes everything; if the
+// dialog is already gone we fall back to a normal alert.
+function showDetailError(msg) {
+  const isDetailTop = window.Modal && typeof Modal.topId === 'function'
+    && Modal.topId() === DETAIL_MODAL_ID;
+  const modalBody = document.getElementById('modal-body');
+  if (isDetailTop && modalBody) {
+    modalBody.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400 py-2">${escHtml(msg)}</p>`;
+  } else {
+    Modal.alert(msg);
+  }
+}
+
+function renderDetailModal(data) {
+  const { badge, is_manual, awarded, not_awarded } = data;
+
+  // Build header with icon + name + type badge
+  let typeBadgeClass, typeBadgeText;
+  if (badge.trigger_key) {
+    typeBadgeClass = 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400';
+    typeBadgeText = `觸發器：${escHtml(badge.trigger_key)}`;
+  } else if (badge.trigger_rule_id) {
+    typeBadgeClass = 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400';
+    typeBadgeText = 'DSL 規則';
+  } else {
+    typeBadgeClass = 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+    typeBadgeText = '手動';
+  }
+
+  let html = '';
+
+  // Header area (icon + name + type badge)
+  html += `<div class="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+    <span class="text-2xl">${escHtml(badge.icon)}</span>
+    <div class="min-w-0">
+      <h4 class="font-heading font-bold text-base text-gray-900 dark:text-gray-100 truncate">${escHtml(badge.name)}</h4>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 ${typeBadgeClass}">${typeBadgeText}</span>
+    </div>
+  </div>`;
+
+  // Awarded section
+  html += `<div class="space-y-4">`;
+  html += `<div>
+    <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">已獲得（${awarded.length} 人）</h3>`;
+  if (awarded.length === 0) {
+    html += `<p class="text-sm text-gray-400 dark:text-gray-500 py-2">尚無人獲得此徽章</p>`;
+  } else {
+    html += `<ul class="divide-y divide-gray-100 dark:divide-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">`;
+    for (const a of awarded) {
+      const date = new Date(a.awarded_at).toLocaleDateString('zh-TW');
+      html += `<li class="flex items-center justify-between px-3 py-2.5 gap-3">
+        <div class="min-w-0">
+          <span class="text-sm font-medium text-gray-800 dark:text-gray-200">${escHtml(a.student_name)}</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500 ml-2">${date}</span>
+        </div>
+        <button type="button"
+                onclick="revokeFromDetail('${escAttr(a.award_id)}')"
+                class="shrink-0 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 cursor-pointer transition-colors">
+          收回
+        </button>
+      </li>`;
+    }
+    html += `</ul>`;
+  }
+  html += `</div>`;
+
+  // Not-awarded section (always shown; award button only for manual)
+  html += `<div>
+    <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">未獲得（${not_awarded.length} 人）</h3>`;
+  if (not_awarded.length === 0) {
+    html += `<p class="text-sm text-gray-400 dark:text-gray-500 py-2">所有學生均已獲得此徽章</p>`;
+  } else {
+    html += `<ul class="divide-y divide-gray-100 dark:divide-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">`;
+    for (const s of not_awarded) {
+      html += `<li class="flex items-center justify-between px-3 py-2.5 gap-3">
+        <span class="text-sm text-gray-700 dark:text-gray-300">${escHtml(s.student_name)}</span>`;
+      if (is_manual) {
+        html += `<button type="button"
+                  onclick="awardFromDetail('${escAttr(s.student_id)}', this)"
+                  class="shrink-0 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 cursor-pointer transition-colors">
+          頒發
+        </button>`;
+      }
+      html += `</li>`;
+    }
+    html += `</ul>`;
+  }
+  html += `</div>`;
+  html += `</div>`;
+
+  // Update the modal body in-place. Write ONLY when the badge-detail dialog is the
+  // actual top modal — not merely when some overlay is visible. After a revoke the
+  // modal stack restores this detail dialog on top, so the write lands here. But if
+  // a confirm (e.g. a second revoke) is currently stacked ON TOP, an async refresh
+  // resolving now must NOT overwrite that confirm's body — guarding on modal
+  // identity prevents clobbering a stacked confirm/alert. If the dialog was already
+  // closed, topId() no longer matches and we skip the write, so we never paint
+  // detail HTML into a hidden body (the "detail vanishes" bug).
+  const isDetailTop = window.Modal && typeof Modal.topId === 'function'
+    && Modal.topId() === DETAIL_MODAL_ID;
+
+  const modalBody = document.getElementById('modal-body');
+  if (isDetailTop && modalBody) {
+    modalBody.innerHTML = html;
+  }
+
+  // Update the modal title
+  const modalTitle = document.getElementById('modal-title');
+  if (isDetailTop && modalTitle) {
+    modalTitle.textContent = `${badge.icon} ${badge.name}`;
+    modalTitle.classList.remove('hidden');
+  }
+
+  // Sync card award count badge (task 4.4)
+  const card = document.querySelector(`[data-badge-id="${badge.id}"]`);
+  if (card) {
+    const countEl = card.querySelector('.award-count-badge');
+    if (countEl) countEl.textContent = `${awarded.length} 人獲得`;
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+  return String(str).replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
+
+window.awardFromDetail = async function(studentId, btn) {
+  if (!detailCurrentBadgeId) return;
+  const doAward = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/award`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Toast.error(err.detail || '頒發失敗');
+        return;
+      }
+      Toast.success('已頒發徽章');
+      await refreshBadgeDetail();
+    } catch {
+      Toast.error('網路錯誤');
+    }
+  };
+  if (btn) {
+    await withLoading(btn, doAward);
+  } else {
+    await doAward();
+  }
+};
+
+window.revokeFromDetail = async function(awardId) {
+  if (!detailCurrentBadgeId) return;
+  // Note: no withLoading here. This runs inside a message-type Modal.confirm
+  // callback, which fires AFTER the confirm closes and the badge-detail body is
+  // restored — that rebuild replaces the clicked button DOM node, so a spinner on
+  // the original (now detached) button would never be visible. Toast + the
+  // refreshBadgeDetail re-render provide the feedback instead.
+  Modal.confirm('確定要撤銷此徽章？此操作無法復原。', async () => {
+    try {
+      const res = await fetch(`${API_BASE}/${detailCurrentBadgeId}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ award_id: awardId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Toast.error(err.detail || '收回失敗');
+        return;
+      }
+      Toast.success('已收回徽章');
+      await refreshBadgeDetail();
+    } catch {
+      Toast.error('網路錯誤');
+    }
+  });
+};
+
+// ── Badge Help Modal ─────────────────────────────────────────────────────────
+document.getElementById('badge-help-btn').addEventListener('click', () => {
+  let html = '';
+
+  // 觸發來源說明
+  html += `<h3 class="font-semibold text-base mb-3">觸發來源</h3>`;
+  html += `<div class="space-y-3 mb-5">`;
+  const sources = [
+    {
+      label: '手動頒發',
+      desc: '老師從「已建立的徽章」列表，手動選擇學生進行頒發。不設定任何觸發條件。',
+    },
+    {
+      label: '內建觸發器（trigger_key）',
+      desc: '系統在特定事件發生後自動評估條件並頒發徽章。鍵值格式如下：',
+    },
+    {
+      label: 'DSL 觸發規則（trigger_rule_id）',
+      desc: '選擇已建立的 DSL 規則作為觸發條件，支援複合邏輯（AND、OR、函數呼叫等）。前往「觸發規則管理」頁面建立規則。',
+    },
+  ];
+  for (const s of sources) {
+    html += `<div class="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3">`;
+    html += `<p class="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">${s.label}</p>`;
+    html += `<p class="text-sm text-gray-600 dark:text-gray-400">${s.desc}</p>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+
+  // 內建 trigger_key 格式說明
+  html += `<h3 class="font-semibold text-base mb-2">內建觸發器鍵值格式</h3>`;
+  html += `<div class="overflow-x-auto mb-5"><table class="w-full text-sm border-collapse">`;
+  html += `<thead><tr class="text-left border-b border-gray-200 dark:border-gray-700"><th class="pb-2 pr-4 font-medium">鍵值範例</th><th class="pb-2 font-medium">說明</th></tr></thead><tbody>`;
+  const keys = [
+    { key: 'checkin_streak_3', desc: '連續打卡滿 3 天（可替換數字）' },
+    { key: 'checkin_streak_7', desc: '連續打卡滿 7 天' },
+    { key: 'checkin_streak_30', desc: '連續打卡滿 30 天' },
+    { key: 'submit_5', desc: '累積繳交滿 5 次（可替換數字）' },
+    { key: 'submit_10', desc: '累積繳交滿 10 次' },
+  ];
+  for (const k of keys) {
+    html += `<tr class="border-b border-gray-100 dark:border-gray-800">`;
+    html += `<td class="py-1.5 pr-4"><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${k.key}</code></td>`;
+    html += `<td class="py-1.5 text-gray-600 dark:text-gray-400">${k.desc}</td>`;
+    html += `</tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // Markdown 語法說明
+  html += `<h3 class="font-semibold text-base mb-2">徽章說明 Markdown 語法</h3>`;
+  html += `<div class="overflow-x-auto mb-2"><table class="w-full text-sm border-collapse">`;
+  html += `<thead><tr class="text-left border-b border-gray-200 dark:border-gray-700"><th class="pb-2 pr-4 font-medium">語法</th><th class="pb-2 font-medium">效果</th></tr></thead><tbody>`;
+  const mdSyntax = [
+    { syntax: '**文字**', effect: '粗體' },
+    { syntax: '*文字*', effect: '斜體' },
+    { syntax: '- 項目', effect: '無序列表' },
+    { syntax: '1. 項目', effect: '有序列表' },
+    { syntax: '> 文字', effect: '引用區塊' },
+    { syntax: '`程式碼`', effect: '行內程式碼' },
+  ];
+  for (const m of mdSyntax) {
+    html += `<tr class="border-b border-gray-100 dark:border-gray-800">`;
+    html += `<td class="py-1.5 pr-4"><code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">${m.syntax}</code></td>`;
+    html += `<td class="py-1.5 text-gray-600 dark:text-gray-400">${m.effect}</td>`;
+    html += `</tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // 範例
+  html += `<h3 class="font-semibold text-base mt-4 mb-2">說明範例</h3>`;
+  html += `<pre class="text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-3 overflow-x-auto"><code>連續打卡 **7 天**的同學將獲得此徽章！
+
+達成條件：
+- 不間斷連續打卡 7 天
+- 適用所有班級作業</code></pre>`;
+
+  Modal.alertHtml(html);
+});
+</script>
+{% endblock %}

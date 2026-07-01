@@ -29,6 +29,17 @@
                  class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
                  placeholder="admin@example.com">
         </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="join_request_reject_cooldown_hours">
+            加入申請拒絕冷卻時間（小時）
+          </label>
+          <input type="number" id="join_request_reject_cooldown_hours" name="join_request_reject_cooldown_hours"
+                 min="0" step="1"
+                 value="{{ config.join_request_reject_cooldown_hours | default(24) }}"
+                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+          <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">學生被拒絕後需等待的時數才能重新申請，設為 0 表示不限制</p>
+        </div>
       </div>
     </div>
 

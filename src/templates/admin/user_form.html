@@ -16,9 +16,11 @@
         {% if not edit_user %}
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="username">使用者名稱 <span class="text-red-500">*</span></label>
-          <input type="text" id="username" name="username" required
+          <input type="text" id="username" name="username" required maxlength="64"
                  class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-                 placeholder="alice123">
+                 placeholder="alice123"
+                 autocomplete="username">
+          <p id="username-status" class="hidden text-xs mt-1"></p>
         </div>
         {% else %}
         <div>
@@ -250,5 +252,61 @@ function applyPreset(presetValue) {
 }
 
 recomputePermissions();
+
+// ── Debounced username uniqueness check on blur ─────────────────────────────
+(function() {
+  var input = document.querySelector('input[name="username"]');
+  var statusEl = document.getElementById('username-status');
+  var timer = null;
+  if (!input || !statusEl) return;
+
+  function setStatus(text, color) {
+    statusEl.textContent = text;
+    statusEl.classList.remove('hidden', 'text-red-500', 'text-green-500', 'text-gray-400');
+    input.classList.remove('border-red-500', 'border-green-500');
+    if (color === 'red') {
+      statusEl.classList.add('text-red-500');
+      input.classList.add('border-red-500');
+    } else if (color === 'green') {
+      statusEl.classList.add('text-green-500');
+      input.classList.add('border-green-500');
+    } else {
+      statusEl.classList.add('text-gray-400');
+    }
+  }
+
+  function hide() {
+    statusEl.classList.add('hidden');
+    statusEl.textContent = '';
+    input.classList.remove('border-red-500', 'border-green-500');
+  }
+
+  input.addEventListener('blur', function() {
+    var username = this.value.trim();
+    clearTimeout(timer);
+    if (!username) { hide(); return; }
+
+    setStatus('檢查中…', 'gray');
+    timer = setTimeout(function() {
+      fetch('/admin/users/check-username?username=' + encodeURIComponent(username))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && data.available) {
+            setStatus('此使用者名稱可使用', 'green');
+          } else {
+            setStatus('此使用者名稱已被使用', 'red');
+          }
+        })
+        .catch(function() {
+          hide();
+        });
+    }, 300);
+  });
+
+  input.addEventListener('input', function() {
+    clearTimeout(timer);
+    hide();
+  });
+})();
 </script>
 {% endblock %}

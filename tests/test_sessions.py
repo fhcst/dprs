@@ -86,6 +86,104 @@ async def test_invalid_token():
 
 
 @pytest.mark.asyncio
+async def test_secure_flag_in_production(monkeypatch):
+    """In production env, session cookie must include '; secure'."""
+    import os
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "production")
+
+    app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32), session_cookie="test_session")
+
+    @app.get("/set")
+    async def set_session(request: Request):
+        request.scope["session"]["user"] = "test"
+        return {"status": "ok"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/set")
+        assert response.status_code == 200
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "; secure" in set_cookie_header.lower(), (
+            f"Expected '; secure' in Set-Cookie header in production, got: {set_cookie_header}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_secure_flag_when_env_is_prod(monkeypatch):
+    """With FASTAPI_APP_ENVIRONMENT='prod', the session cookie must include '; secure'.
+
+    Exercises the load-bearing deployment value 'prod' (not just 'production')
+    through the SessionMiddleware send_wrapper, so a regression that re-introduces
+    an inline `== 'production'` check would be caught here as well as in
+    tests/test_secure_cookie.py for the access_token cookie.
+    """
+    import os
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "prod")
+
+    app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32), session_cookie="test_session")
+
+    @app.get("/set")
+    async def set_session(request: Request):
+        request.scope["session"]["user"] = "test"
+        return {"status": "ok"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/set")
+        assert response.status_code == 200
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "; secure" in set_cookie_header.lower(), (
+            f"Expected '; secure' in Set-Cookie header when env is 'prod', got: {set_cookie_header}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_no_secure_flag_in_development(monkeypatch):
+    """In non-production env, session cookie must NOT include '; secure'."""
+    import os
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "development")
+
+    app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32), session_cookie="test_session")
+
+    @app.get("/set")
+    async def set_session(request: Request):
+        request.scope["session"]["user"] = "test"
+        return {"status": "ok"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/set")
+        assert response.status_code == 200
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "; secure" not in set_cookie_header.lower(), (
+            f"Expected no '; secure' in Set-Cookie header in development, got: {set_cookie_header}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_no_secure_flag_when_env_unset(monkeypatch):
+    """When FASTAPI_APP_ENVIRONMENT is not set, default to development (no '; secure')."""
+    import os
+    monkeypatch.delenv("FASTAPI_APP_ENVIRONMENT", raising=False)
+
+    app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32), session_cookie="test_session")
+
+    @app.get("/set")
+    async def set_session(request: Request):
+        request.scope["session"]["user"] = "test"
+        return {"status": "ok"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/set")
+        assert response.status_code == 200
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "; secure" not in set_cookie_header.lower(), (
+            f"Expected no '; secure' when env unset (fail-safe default), got: {set_cookie_header}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_pydantic_session_struct():
     """Test using Pydantic model as session structure."""
     from pydantic import BaseModel

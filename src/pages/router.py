@@ -1,9 +1,13 @@
 """Pages router — login, logout redirect, dashboard, and admin panel."""
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
 from core.users.models import User
 from pages.deps import get_page_user
+from shared.environment import is_production
+from shared.limiter import limiter
 from shared.page_context import build_page_context, get_page_context
 from shared.webpage import webpage
 
@@ -13,6 +17,52 @@ _COOKIE_NAME = "access_token"
 _COOKIE_MAX_AGE = 60 * 60 * 24  # 24h
 
 
+def _is_production() -> bool:
+    """委派至共用 ``is_production()`` helper（單一事實來源）。
+
+    保留薄包裝以相容既有測試對 ``_is_production()`` 的直接呼叫；
+    正式環境判定同時接受 ``prod`` 與 ``production``。
+    """
+    return is_production()
+
+
+def _is_safe_next(next_value: str | None) -> bool:
+    """Return True only for a single same-origin relative-path `next` (fail-closed).
+
+    Two-stage validation that closes open-redirect bypasses:
+
+    1. Reject outright any value whose **path/authority portion** (everything before
+       the first ``?`` or ``#``) contains a backslash (``\\``), begins with ``//``, or
+       contains a colon (``:``); reject any value containing an ASCII control character.
+    2. Require a single leading ``/`` and, via ``urlsplit``, an empty ``scheme`` and
+       ``netloc``.
+
+    Stage 1's authority checks deliberately ignore the query/fragment: a colon (or
+    other reserved char) in a query value — ISO timestamps, ``?from=10:30``, ratios —
+    is harmless data that stays on our own origin, so it must round-trip rather than be
+    silently dropped. Only the path/authority portion can carry an off-origin vector.
+
+    Stage 1 is still mandatory: an empty ``urlsplit(next).netloc`` is NOT sufficient on
+    its own, because e.g. ``/\\evil.com`` yields an empty netloc yet a browser normalises
+    ``\\`` to ``/`` into a protocol-relative (off-origin) redirect.
+    """
+    if not next_value:
+        return False
+    # Stage 1 — reject dangerous vectors before trusting the parse. Apply the
+    # authority checks only to the path portion so legitimate query strings that
+    # contain ':'/'\\'/'//' (e.g. ?ts=2026-06-28T12:00:00) still round-trip.
+    path_part = next_value.split("?", 1)[0].split("#", 1)[0]
+    if "\\" in path_part or path_part.startswith("//") or ":" in path_part:
+        return False
+    if any(ord(ch) < 0x20 for ch in next_value):
+        return False
+    # Stage 2 — require a single same-origin relative path.
+    if not next_value.startswith("/"):
+        return False
+    split = urlsplit(next_value)
+    return not split.scheme and not split.netloc
+
+
 @router.get("/login", name="login_page")
 @webpage.page("login.html")
 async def login_page(request: Request, error: str | None = None, next: str | None = None):
@@ -20,6 +70,7 @@ async def login_page(request: Request, error: str | None = None, next: str | Non
 
 
 @router.post("/login")
+@limiter.limit("10/minute")
 @webpage.redirect(status_code=302)
 async def login_form(
     request: Request,
@@ -31,10 +82,8 @@ async def login_form(
     from extensions.registry import registry
     from core.auth.jwt import create_access_token
 
-    # Validate next URL to prevent open redirect (must be a relative path)
-    safe_next = None
-    if next and next.startswith("/") and not next.startswith("//"):
-        safe_next = next
+    # Validate next URL to prevent open redirect (single same-origin relative path only)
+    safe_next = next if _is_safe_next(next) else None
 
     try:
         provider: AuthProvider = registry.get(AuthProvider, "local")
@@ -52,6 +101,7 @@ async def login_form(
         httponly=True,
         samesite="lax",
         max_age=_COOKIE_MAX_AGE,
+        secure=_is_production(),
     )
     return response
 
@@ -63,7 +113,7 @@ async def dashboard_page(
     current_user: User = Depends(get_page_user),
     create_class: int = 0,
 ):
-    from datetime import date, datetime, timezone
+    from datetime import date, datetime, timedelta, timezone
 
     from core.classes.models import Class, ClassMembership
     from tasks.checkin.models import CheckinRecord
@@ -141,13 +191,30 @@ async def dashboard_page(
         })
 
     from gamification.badges.models import BadgeAward
-    from gamification.badges.service import get_student_badges
+    from gamification.badges.service import active_awards_query, get_student_badges
     from gamification.points.service import get_balance
     from tasks.submissions.models import TaskSubmission
 
+    # ── Teacher pending counts (across all managed classes) ──
+    class_ids = [m.class_id for m in memberships]
+    pending_submission_count = 0
+    pending_join_request_count = 0
+    if page_ctx["can_manage_class"] or page_ctx["can_manage_tasks"]:
+        if class_ids:
+            from beanie.operators import In
+            from core.classes.models import JoinRequest
+            pending_submission_count = await TaskSubmission.find(
+                In(TaskSubmission.class_id, class_ids),
+                TaskSubmission.status == "pending",
+            ).count()
+            pending_join_request_count = await JoinRequest.find(
+                In(JoinRequest.class_id, class_ids),
+                JoinRequest.status == "pending",
+            ).count()
+
     user_id = str(current_user.id)
     total_points = await get_balance(user_id)
-    badge_count = await BadgeAward.find(BadgeAward.student_id == user_id).count()
+    badge_count = await active_awards_query(BadgeAward.student_id == user_id).count()
     submission_count = await TaskSubmission.find(TaskSubmission.student_id == user_id).count()
     badges = await get_student_badges(user_id)
 
@@ -158,7 +225,7 @@ async def dashboard_page(
     submissions = await TaskSubmission.find(
         TaskSubmission.student_id == user_id
     ).sort(-TaskSubmission.submitted_at).limit(20).to_list()
-    badge_awards = await BadgeAward.find(
+    badge_awards = await active_awards_query(
         BadgeAward.student_id == user_id
     ).sort(-BadgeAward.awarded_at).limit(20).to_list()
 
@@ -172,6 +239,15 @@ async def dashboard_page(
     activities.sort(key=lambda x: x["timestamp"], reverse=True)
     recent_activities = activities[:20]
 
+    # ── First-login detection ──
+    is_first_login = False
+    if not memberships and submission_count == 0 and current_user.created_at:
+        created = current_user.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if (now - created) < timedelta(hours=24):
+            is_first_login = True
+
     return {
         **page_ctx,
         "classes": classes,
@@ -184,6 +260,9 @@ async def dashboard_page(
         "badges": badges,
         "recent_activities": recent_activities,
         "open_create_class_modal": bool(create_class),
+        "pending_submission_count": pending_submission_count,
+        "pending_join_request_count": pending_join_request_count,
+        "is_first_login": is_first_login,
     }
 
 
@@ -634,6 +713,7 @@ async def admin_system_settings_submit(
     request: Request,
     site_name: str = Form(...),
     admin_email: str = Form(default=""),
+    join_request_reject_cooldown_hours: int = Form(default=24),
     current_user: User = Depends(_require_write_system),
 ):
     from core.system.models import SystemConfig
@@ -641,6 +721,8 @@ async def admin_system_settings_submit(
     if config:
         config.site_name = site_name
         config.admin_email = admin_email
+        if join_request_reject_cooldown_hours >= 0:
+            config.join_request_reject_cooldown_hours = join_request_reject_cooldown_hours
         await config.save()
         request.app.state.system_config = config
         webpage.webpage_context_update({"site_name": site_name})

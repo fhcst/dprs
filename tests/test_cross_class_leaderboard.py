@@ -110,3 +110,20 @@ async def test_member_can_view_leaderboard(leaderboard_app):
     data = resp.json()
     assert data["visible"] is True
     assert "leaderboard" in data
+
+
+async def test_non_member_cannot_view_leaderboard_page(leaderboard_app):
+    """Non-member requesting the leaderboard PAGE receives 403 (FINDING-003).
+
+    The page route previously gated only on a permission flag, letting any
+    teacher-permission holder (and, via leaderboard_enabled, outsiders) browse
+    another class's ranking. It must mirror the API route's membership check.
+    """
+    from httpx import AsyncClient, ASGITransport
+    from core.auth.permissions import STUDENT
+
+    app, teacher, member, outsider, alpha = leaderboard_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", _token(str(outsider.id), int(STUDENT)))
+        resp = await ac.get(f"/pages/classes/{alpha.id}/leaderboard")
+    assert resp.status_code == 403

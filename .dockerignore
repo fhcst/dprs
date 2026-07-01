@@ -1,0 +1,28 @@
+# Rust build artifacts (keep pkg/ — contains WASM bundle for frontend)
+crates/*/target/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Git
+.git/
+.github/
+
+# IDE
+.idea/
+.vscode/
+
+# Tests & docs (not needed in production image)
+tests/
+docs/
+openspec/
+*.md
+!README.md
+
+# Claude / Spectra
+.claude/
+.agent/
+.gemini/
+.spectra.yaml

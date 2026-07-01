@@ -19,45 +19,38 @@
     })();
   </script>
 
-  {# ── Tailwind CSS Play CDN — class strategy dark mode ── #}
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50:  '#f5f3ff',
-              100: '#ede9fe',
-              200: '#ddd6fe',
-              300: '#c4b5fd',
-              400: '#a78bfa',
-              500: '#8b5cf6',
-              600: '#7c3aed',
-              700: '#6d28d9',
-              800: '#5b21b6',
-              900: '#4c1d95',
-              950: '#2e1065',
-            },
-          },
-          fontFamily: {
-            heading: ['Poppins', 'sans-serif'],
-            sans: ['Open Sans', 'sans-serif'],
-          },
-        },
-      },
-    };
-  </script>
+  {# ── Tailwind CSS (pre-built static CSS) ── #}
+  <link rel="stylesheet" href="/static/css/tailwind.css">
 
   {# ── Google Fonts: Poppins (heading) + Open Sans (body) ── #}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 
+  {# ── Reduced motion: respect user preference (WCAG 2.3.3) ── #}
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+    @media (max-width: 640px) {
+      .text-sm { font-size: 1rem; line-height: 1.5rem; }
+    }
+  </style>
+
   {% block head_extra %}{% endblock %}
 </head>
 <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans antialiased">
+
+{# ── Skip-to-content link (WCAG 2.4.1) ── #}
+<a href="#main-content"
+   class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:bg-brand-600 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium focus:shadow-lg">
+  跳至主要內容
+</a>
 
 {# ═══════════════════════════════════════════════════════════════════════════
    Layout wrapper — Desktop: sidebar + main; Tablet/Mobile: full-width main
@@ -261,6 +254,13 @@
           </svg>
           積分管理
         </a>
+        <a href="{{ url_for('badges_manage_page', class_id=active_class.id) }}"
+           class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer transition-colors duration-150">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+          </svg>
+          徽章管理
+        </a>
       </div>
       {% endif %}
       {% endif %}
@@ -356,7 +356,7 @@
         </div>
 
         {# Tablet: horizontal nav (md only, hidden lg+) #}
-        <nav class="hidden md:flex lg:hidden items-center gap-1 mr-auto">
+        <nav class="hidden md:flex lg:hidden items-center gap-1 mr-auto overflow-x-auto flex-nowrap scrollbar-hide">
           <a href="{{ url_for('dashboard_page') }}"
              data-nav="dashboard"
              class="nav-item px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150">
@@ -439,7 +439,7 @@
     </header>
 
     {# ── Page content ─────────────────────────────────────────────────── #}
-    <main class="flex-1 p-4 lg:p-6 pb-20 md:pb-4">
+    <main id="main-content" class="flex-1 p-4 lg:p-6 pb-20 md:pb-4">
       {# ── Breadcrumb navigation ── #}
       {% block breadcrumb %}{% endblock %}
       {% block content %}{% endblock %}
@@ -453,6 +453,8 @@
    ═══════════════════════════════════════════════════════════════════════════ #}
 {% if current_user %}
 <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 flex items-stretch">
+
+  {# ── Common: Home tab (all roles) ── #}
   <a href="{{ url_for('dashboard_page') }}"
      data-nav="dashboard"
      class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
@@ -462,7 +464,47 @@
     <span class="text-xs">首頁</span>
   </a>
 
-  {% if not can_manage_class and not can_manage_tasks and not can_manage_users and not is_sys_admin %}
+  {% if can_manage_class or can_manage_tasks %}
+  {# ── Teacher mobile tabs: 審閱, 出席, 班級, 更多 ── #}
+  {% set first_class_id = classes[0].class_id if classes else '' %}
+
+  <a href="{% if first_class_id %}{{ url_for('submission_review_page', class_id=first_class_id) }}{% else %}{{ url_for('dashboard_page') }}{% endif %}"
+     data-nav="review"
+     class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+    </svg>
+    <span class="text-xs">審閱</span>
+  </a>
+
+  <a href="{% if first_class_id %}{{ url_for('attendance_manage_page', class_id=first_class_id) }}{% else %}{{ url_for('dashboard_page') }}{% endif %}"
+     data-nav="attendance"
+     class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+    </svg>
+    <span class="text-xs">出席</span>
+  </a>
+
+  <a href="{{ url_for('dashboard_page') }}"
+     data-nav="classes"
+     class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 3.741-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
+    </svg>
+    <span class="text-xs">班級</span>
+  </a>
+
+  <button onclick="openTeacherMoreSheet()"
+          class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px] cursor-pointer">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+    </svg>
+    <span class="text-xs">更多</span>
+  </button>
+
+  {% else %}
+  {# ── Student mobile tabs: 徽章, 歷程, 設定 ── #}
   <a href="{{ url_for('badges_page') }}"
      data-nav="badges"
      class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
@@ -471,44 +513,50 @@
     </svg>
     <span class="text-xs">徽章</span>
   </a>
-  {% endif %}
 
-  {% if can_manage_tasks %}
-  <a href="{{ url_for('dashboard_page') }}"
-     data-nav="templates"
+  <a href="{{ url_for('learning_history_page') }}"
+     data-nav="history"
      class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
     </svg>
-    <span class="text-xs">管理</span>
+    <span class="text-xs">歷程</span>
+  </a>
+
+  <a href="{{ url_for('settings_page') }}"
+     data-nav="settings"
+     class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+    </svg>
+    <span class="text-xs">設定</span>
   </a>
   {% endif %}
 
-  {% if can_manage_all_classes %}
-  <a href="{{ url_for('admin_classes_list_page') }}"
-     data-nav="admin"
-     class="nav-item flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px]">
-    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm10 0a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V6ZM4 16a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2Zm10 0a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2Z" />
-    </svg>
-    <span class="text-xs">班級</span>
-  </a>
-  {% endif %}
-
-  <button onclick="
-    var logoutForm = document.createElement('form');
-    logoutForm.method = 'post';
-    logoutForm.action = '{{ url_for("logout") }}';
-    document.body.appendChild(logoutForm);
-    logoutForm.submit();
-  "
-          class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-150 min-h-[56px] cursor-pointer">
-    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
-    </svg>
-    <span class="text-xs">登出</span>
-  </button>
 </nav>
+
+{# ── Teacher "More" bottom sheet content (built via Modal.dialog) ── #}
+{% if (can_manage_class or can_manage_tasks) and classes %}
+<script>
+  function openTeacherMoreSheet() {
+    var classId = '{{ classes[0].class_id if classes else "" }}';
+    var links = [
+      { label: '積分管理', href: classId ? '/pages/teacher/classes/' + classId + '/points' : '#' },
+      { label: '徽章管理', href: classId ? '/pages/teacher/classes/' + classId + '/badges' : '#' },
+      { label: '簽到設定', href: classId ? '/pages/teacher/classes/' + classId + '/checkin-config' : '#' },
+      { label: 'Trigger Rules', href: classId ? '/pages/teacher/classes/' + classId + '/trigger-rules' : '#' },
+      { label: '個人設定', href: '{{ url_for("settings_page") }}' },
+    ];
+    var html = '<div class="space-y-1">';
+    links.forEach(function (l) {
+      html += '<a href="' + l.href + '" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150">' + l.label + '</a>';
+    });
+    html += '</div>';
+    Modal.dialog({ title: '更多功能', content: html, confirmText: '關閉' });
+  }
+</script>
+{% endif %}
 {% endif %}
 
 {# ═══════════════════════════════════════════════════════════════════════════
@@ -536,12 +584,26 @@
       sidebar.classList.remove('w-64');
       sidebar.classList.add('w-16');
       labels.forEach(function(el) { el.classList.add('hidden'); });
+      localStorage.setItem('sidebar-collapsed', '1');
     } else {
       sidebar.classList.remove('w-16');
       sidebar.classList.add('w-64');
       labels.forEach(function(el) { el.classList.remove('hidden'); });
+      localStorage.setItem('sidebar-collapsed', '0');
     }
   }
+
+  // ── Restore sidebar collapse state on page load ──
+  (function () {
+    if (localStorage.getItem('sidebar-collapsed') === '1') {
+      var sidebar = document.getElementById('sidebar');
+      if (sidebar && sidebar.classList.contains('w-64')) {
+        sidebar.classList.remove('w-64');
+        sidebar.classList.add('w-16');
+        sidebar.querySelectorAll('.sidebar-label').forEach(function(el) { el.classList.add('hidden'); });
+      }
+    }
+  })();
 
   // ── Class dropdown selector (teacher sidebar) ──
   (function () {
@@ -605,24 +667,39 @@
 </script>
 
 {# ═══════════════════════════════════════════════════════════════════════════
-   Global Modal component — replaces native alert() / confirm() dialogs
+   Global Modal component — accessible dialog with focus trap
    Usage:
      Modal.confirm("message", onConfirm, onCancel)
      Modal.alert("message", onClose)
+     Modal.dialog({ title, content, id, onConfirm, onClose, confirmText, cancelText, maxWidth })
+       - onConfirm may return false / Modal.KEEP_OPEN (or throw) to keep the dialog open
+       - id enables Modal.topId() stacking-safety checks for async #modal-body mutations
    ═══════════════════════════════════════════════════════════════════════════ #}
+<style>
+  @media (max-width: 640px) {
+    .modal-panel { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important; border-radius: 1rem 1rem 0 0 !important; max-height: 85vh !important; overflow-y: auto !important; margin: 0 !important; max-width: 100% !important; }
+    .modal-overlay-inner { align-items: flex-end !important; }
+  }
+</style>
+
 <div id="modal-overlay"
-     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-  <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 w-full max-w-sm">
-    <p id="modal-message" class="text-sm text-gray-800 dark:text-gray-200 mb-5 leading-relaxed"></p>
-    <div class="flex gap-3 justify-end">
-      <button id="modal-cancel-btn"
-              class="hidden px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
-        取消
-      </button>
-      <button id="modal-confirm-btn"
-              class="px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-lg cursor-pointer">
-        確認
-      </button>
+     class="hidden fixed inset-0 z-50 bg-black/50 px-4"
+     aria-hidden="true">
+  <div class="modal-overlay-inner flex items-center justify-center min-h-full">
+    <div class="modal-panel bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 w-full max-w-sm"
+         role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h3 id="modal-title" class="hidden font-heading font-semibold text-gray-900 dark:text-gray-100 mb-3"></h3>
+      <div id="modal-body" class="text-sm text-gray-800 dark:text-gray-200 mb-5 leading-relaxed"></div>
+      <div class="flex gap-3 justify-end">
+        <button id="modal-cancel-btn"
+                class="hidden px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer min-h-[44px]">
+          取消
+        </button>
+        <button id="modal-confirm-btn"
+                class="px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-lg cursor-pointer min-h-[44px]">
+          確認
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -630,34 +707,414 @@
 <script>
 (function () {
   var overlay = document.getElementById('modal-overlay');
-  var message = document.getElementById('modal-message');
+  var panel = overlay.querySelector('.modal-panel');
+  var titleEl = document.getElementById('modal-title');
+  var bodyEl = document.getElementById('modal-body');
   var confirmBtn = document.getElementById('modal-confirm-btn');
   var cancelBtn = document.getElementById('modal-cancel-btn');
+  var _trigger = null;        // element to refocus once the LAST modal closes
+  var _savedOverflow = '';
+  var _current = null;        // opts of the modal currently on top
+  var _stack = [];            // snapshots of modals layered underneath the top one
+  var _busy = false;          // true while an async dialog onConfirm is in flight
+  var _suppressClick = false; // briefly ignore clicks right after restoring an underlying modal
 
-  function _open(msg, onConfirm, onCancel, showCancel) {
-    message.textContent = msg;
-    cancelBtn.classList.toggle('hidden', !showCancel);
+  var FOCUSABLE = 'a[href],button:not([disabled]),textarea,input:not([type="hidden"]),select,[tabindex]:not([tabindex="-1"])';
+  // All max-width utilities a modal may carry — cleared before applying a new one
+  // so a wide modal (e.g. badge detail max-w-xl) never leaks into a narrow confirm.
+  var MAXW = ['max-w-xs', 'max-w-sm', 'max-w-md', 'max-w-lg', 'max-w-xl', 'max-w-2xl', 'max-w-3xl'];
 
-    function cleanup() {
+  // Explicit, self-documenting sentinel a dialog onConfirm may return to keep the
+  // dialog open. Returning `false` is also still honoured (back-compat), but
+  // Modal.KEEP_OPEN avoids the "bare `return;` accidentally closes the dialog"
+  // foot-gun for future callers. Keep-open is matched STRUCTURALLY on the truthy
+  // `__modalKeepOpen` property (see _onConfirm), so returning a reconstructed
+  // { __modalKeepOpen: true } literal works identically to this singleton — the
+  // contract is the shape, not reference identity.
+  var KEEP_OPEN = { __modalKeepOpen: true };
+  // Escape hatch for a hung dialog onConfirm (e.g. a stalled fetch that never
+  // settles): after this delay the busy lock is released so Cancel/Esc/click-away
+  // work again instead of trapping the user in an undismissable modal.
+  var DIALOG_BUSY_TIMEOUT_MS = 15000;
+  // After a message-type confirm/alert restores an UNDERLYING modal in the same
+  // click turn, ignore any click that lands within this window — it is almost
+  // certainly the second half of an impatient double-click and would otherwise act
+  // on the just-restored modal (e.g. close the badge-detail dialog a revoke must
+  // keep open). Sized to cover a typical OS double-click interval.
+  var RESTORE_CLICK_GUARD_MS = 350;
+
+  function _isDialog(opts) {
+    // Only Modal.dialog (form-type) opts carry the explicit `_isForm` marker and
+    // opt into the new lifecycle: onConfirm runs BEFORE teardown (so it can read
+    // the injected body fields) and its resolved value controls close timing.
+    // Message-type confirm/alert/alertHtml keep the legacy close-then-callback
+    // semantics — alertHtml also injects `html`, so dialog-ness must NOT be inferred
+    // from body presence, and a content-less dialog must NOT silently fall back to
+    // the broken callback-after-teardown path either. Discriminate on the marker.
+    return !!(opts && opts._isForm);
+  }
+
+  function _trapFocus(e) {
+    if (overlay.classList.contains('hidden')) return;
+    var focusable = panel.querySelectorAll(FOCUSABLE);
+    if (!focusable.length) return;
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.key === 'Tab') {
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  // Paint the panel from an opts object (used when opening a modal).
+  function _render(opts) {
+    panel.setAttribute('role', opts.role || 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+
+    if (opts.title) {
+      titleEl.textContent = opts.title;
+      titleEl.classList.remove('hidden');
+      panel.setAttribute('aria-labelledby', 'modal-title');
+    } else {
+      titleEl.textContent = '';
+      titleEl.classList.add('hidden');
+      panel.removeAttribute('aria-labelledby');
+    }
+
+    if (opts.html != null) { bodyEl.innerHTML = opts.html; }
+    else { bodyEl.textContent = opts.message || ''; }
+
+    confirmBtn.textContent = opts.confirmText || '確認';
+    confirmBtn.disabled = false;
+    cancelBtn.textContent = opts.cancelText || '取消';
+    cancelBtn.disabled = false;
+    cancelBtn.classList.toggle('hidden', !opts.showCancel);
+
+    MAXW.forEach(function (c) { panel.classList.remove(c); });
+    panel.classList.add(opts.maxWidth || 'max-w-sm');
+  }
+
+  // Capture the LIVE state of the top modal so it can be restored after a modal
+  // opened on top of it closes. We snapshot the live body (not opts.html) because
+  // callers such as badge detail rewrite #modal-body after open.
+  //
+  // LIMITATION: the body is serialized to an HTML string (bodyEl.innerHTML), so it
+  // captures neither live <input>/<textarea>/<select> .value (only their attributes)
+  // nor handlers bound via addEventListener. Only stack a modal OVER a dialog whose
+  // body is inert markup + inline on* handlers (e.g. the badge-detail lists). Do NOT
+  // stack over a form dialog with live inputs / JS-bound listeners — the create/join-
+  // class dialogs never get a modal opened on top of them, so this is safe today.
+  function _snapshot() {
+    return {
+      titleText: titleEl.textContent,
+      titleHidden: titleEl.classList.contains('hidden'),
+      bodyHtml: bodyEl.innerHTML,
+      confirmText: confirmBtn.textContent,
+      cancelText: cancelBtn.textContent,
+      cancelHidden: cancelBtn.classList.contains('hidden'),
+      role: panel.getAttribute('role'),
+      maxw: MAXW.filter(function (c) { return panel.classList.contains(c); }),
+      trigger: _trigger,
+      opts: _current,
+    };
+  }
+
+  function _restore(s) {
+    titleEl.textContent = s.titleText;
+    titleEl.classList.toggle('hidden', s.titleHidden);
+    if (s.titleHidden) panel.removeAttribute('aria-labelledby');
+    else panel.setAttribute('aria-labelledby', 'modal-title');
+    bodyEl.innerHTML = s.bodyHtml;
+    confirmBtn.textContent = s.confirmText;
+    confirmBtn.disabled = false;
+    cancelBtn.textContent = s.cancelText;
+    cancelBtn.disabled = false;
+    cancelBtn.classList.toggle('hidden', s.cancelHidden);
+    panel.setAttribute('role', s.role || 'dialog');
+    MAXW.forEach(function (c) { panel.classList.remove(c); });
+    (s.maxw && s.maxw.length ? s.maxw : ['max-w-sm']).forEach(function (c) { panel.classList.add(c); });
+    _trigger = s.trigger;
+    _current = s.opts;
+    _busy = false;
+  }
+
+  // Remove the top modal: restore the layer beneath it if any, otherwise hide.
+  function _popOrHide() {
+    if (_stack.length) {
+      var s = _stack.pop();
+      _restore(s);
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+      var f = panel.querySelector(FOCUSABLE);
+      if (f) f.focus();
+    } else {
       overlay.classList.add('hidden');
-      overlay.removeEventListener('click', backdropHandler);
-      confirmBtn.onclick = null;
-      cancelBtn.onclick = null;
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = _savedOverflow;
+      titleEl.textContent = '';
+      titleEl.classList.add('hidden');
+      bodyEl.innerHTML = '';
+      _current = null;
+      _busy = false;
+      if (_trigger && _trigger.focus) _trigger.focus();
+    }
+  }
+
+  function _onConfirm() {
+    var opts = _current;
+    if (!opts) return;
+
+    if (!_isDialog(opts)) {
+      // Message-type confirm/alert keep the legacy order: close first, THEN run
+      // the callback. This is what lets `confirm → (open a follow-up alert)` flows
+      // work — the confirm is already gone before the alert is shown.
+      var cb = opts.onConfirm;
+      var restoring = _stack.length > 0;
+      _popOrHide();
+      if (restoring) {
+        // _popOrHide just restored an UNDERLYING modal in this same click turn.
+        // Arm a short guard so an immediately-following click (the 2nd half of a
+        // double-click) does not act on the just-restored modal's confirm/cancel
+        // button — e.g. closing the badge-detail dialog the revoke must keep open.
+        _suppressClick = true;
+        setTimeout(function () { _suppressClick = false; }, RESTORE_CLICK_GUARD_MS);
+      }
+      if (cb) cb();
+      return;
     }
 
-    confirmBtn.onclick = function () { cleanup(); if (onConfirm) onConfirm(); };
-    cancelBtn.onclick = function () { cleanup(); if (onCancel) onCancel(); };
+    // Dialog (form) modals: run onConfirm while the body — and the fields/error
+    // nodes it contains — are still in the DOM. Close timing is decided by the
+    // resolved value: `false`, any object with a truthy `__modalKeepOpen` (the
+    // Modal.KEEP_OPEN sentinel OR a shape-equivalent literal), or throw/reject keep
+    // the dialog open with its body preserved; anything else closes and clears it.
+    _busy = true;
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    var settled = false;
+    // Escape hatch: if onConfirm never settles (stalled network), release the busy
+    // lock after a timeout and re-enable Cancel so Esc/overlay/Cancel dismiss the
+    // modal. Confirm stays disabled to avoid double-submitting the in-flight call.
+    var watchdog = setTimeout(function () {
+      if (settled || _current !== opts) return;
+      _busy = false;
+      cancelBtn.disabled = false;
+    }, DIALOG_BUSY_TIMEOUT_MS);
+    Promise.resolve()
+      .then(function () { return opts.onConfirm ? opts.onConfirm() : undefined; })
+      .then(function (result) {
+        settled = true;
+        clearTimeout(watchdog);
+        // If the user already dismissed this dialog (or it was superseded by another
+        // modal) while the request was in flight, do nothing — acting now would tear
+        // down or paint over a different modal.
+        if (_current !== opts) return;
+        _busy = false;
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+        // Keep-open is detected STRUCTURALLY (any truthy `__modalKeepOpen`), not by
+        // reference equality with the KEEP_OPEN singleton — so a caller who reads the
+        // documented shape and returns their OWN { __modalKeepOpen: true } literal
+        // still keeps the dialog open instead of silently closing. `false` also keeps
+        // it open (back-compat); anything else (incl. a bare `return;`) closes.
+        if (result !== false && !(result && result.__modalKeepOpen)) { _popOrHide(); }
+      })
+      .catch(function (err) {
+        settled = true;
+        clearTimeout(watchdog);
+        // Keep the dialog open and swallow the error so it never surfaces as an
+        // unhandled promise rejection in the console.
+        if (window.console && console.error) console.error('Modal dialog onConfirm error:', err);
+        if (_current !== opts) return;
+        _busy = false;
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+      });
+  }
 
-    function backdropHandler(e) {
-      if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); }
+  function _onCancel() {
+    var opts = _current;
+    if (!opts) return;
+    var cb = opts.onCancel;
+    _popOrHide();
+    if (cb) cb();
+  }
+
+  // Bind the permanent handlers once; they always act on the current top modal.
+  confirmBtn.onclick = function () { if (_suppressClick || _busy) return; _onConfirm(); };
+  cancelBtn.onclick = function () { if (_suppressClick || _busy) return; _onCancel(); };
+  overlay.onclick = function (e) {
+    if (_busy) return;
+    if (e.target === overlay || e.target === overlay.querySelector('.modal-overlay-inner')) {
+      _onCancel();
     }
-    overlay.addEventListener('click', backdropHandler);
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (overlay.classList.contains('hidden') || _busy) return;
+    _onCancel();
+  });
+  panel.addEventListener('keydown', _trapFocus);
+
+  function _show(opts) {
+    // opts: { title, message, html, onConfirm, onCancel, showCancel, role, confirmText, cancelText, maxWidth }
+    if (overlay.classList.contains('hidden')) {
+      // First modal in a (possibly nested) sequence: lock scroll and remember the
+      // element to refocus once everything closes.
+      _savedOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      _trigger = document.activeElement;
+    } else {
+      // A modal is already open — push it so it can be restored later instead of
+      // being overwritten (single overlay is shared by every modal).
+      _stack.push(_snapshot());
+    }
+
+    _current = opts;
+    _busy = false;
+    // Clear any lingering post-restore double-click guard: it was armed to protect a
+    // specific just-restored modal (scoped only by wall-clock RESTORE_CLICK_GUARD_MS),
+    // and must not survive into this freshly-opened, unrelated modal and swallow its
+    // first confirm/cancel click.
+    _suppressClick = false;
+    _render(opts);
+
     overlay.classList.remove('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+
+    var firstFocusable = panel.querySelector(FOCUSABLE);
+    if (firstFocusable) firstFocusable.focus();
   }
 
   window.Modal = {
-    confirm: function (msg, onConfirm, onCancel) { _open(msg, onConfirm, onCancel, true); },
-    alert: function (msg, onClose) { _open(msg, onClose, null, false); },
+    // Sentinel a dialog onConfirm can return to stay open (alongside legacy `false`).
+    KEEP_OPEN: KEEP_OPEN,
+    // Identity of the modal currently on top (its opts.id, or null). Lets callers
+    // that mutate #modal-body asynchronously confirm THEIR dialog is still the top
+    // modal before writing, so they never clobber a stacked confirm/alert.
+    topId: function () { return _current ? (_current.id || null) : null; },
+    confirm: function (msg, onConfirm, onCancel) {
+      _show({ message: msg, onConfirm: onConfirm, onCancel: onCancel, showCancel: true, role: 'alertdialog' });
+    },
+    alert: function (msg, onClose) {
+      _show({ message: msg, onConfirm: onClose, showCancel: false });
+    },
+    alertHtml: function (htmlMsg, onClose) {
+      _show({ html: htmlMsg, onConfirm: onClose, showCancel: false, maxWidth: 'max-w-2xl' });
+    },
+    dialog: function (opts) {
+      _show({
+        _isForm: true,        // opt into the form-dialog lifecycle (see _isDialog)
+        id: opts.id,          // optional identity, queryable via Modal.topId()
+        title: opts.title,
+        html: opts.content,
+        onConfirm: opts.onConfirm,
+        onCancel: opts.onClose,
+        showCancel: !!opts.onClose || !!opts.onConfirm,
+        confirmText: opts.confirmText,
+        cancelText: opts.cancelText,
+        maxWidth: opts.maxWidth,
+      });
+    },
+  };
+})();
+</script>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   Global Toast notification system
+   Usage:
+     Toast.success("message")   — green, auto-dismiss 3s
+     Toast.error("message")     — red, auto-dismiss 5s + close button
+     Toast.info("message")      — blue, auto-dismiss 3s
+   ═══════════════════════════════════════════════════════════════════════════ #}
+<div id="toast-container" role="status" aria-live="polite"
+     class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+<script>
+(function () {
+  var container = document.getElementById('toast-container');
+
+  var ICONS = {
+    success: '<svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>',
+    error: '<svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>',
+    info: '<svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>',
+  };
+
+  var STYLES = {
+    success: 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300',
+    error: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300',
+    info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300',
+  };
+
+  var DURATIONS = { success: 3000, error: 5000, info: 3000 };
+
+  function _show(type, message) {
+    var toast = document.createElement('div');
+    toast.className = 'flex items-start gap-3 px-4 py-3 rounded-lg border shadow-lg pointer-events-auto ' + STYLES[type];
+
+    var closeHtml = type === 'error'
+      ? '<button class="ml-auto shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer" aria-label="關閉">' +
+        '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>' +
+        '</button>'
+      : '';
+
+    toast.innerHTML = ICONS[type] + '<p class="text-sm leading-relaxed">' + message.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>' + closeHtml;
+
+    if (type === 'error') {
+      toast.querySelector('button').onclick = function () { _remove(toast); };
+    }
+
+    container.appendChild(toast);
+
+    var timer = setTimeout(function () { _remove(toast); }, DURATIONS[type]);
+    toast._timer = timer;
+  }
+
+  function _remove(toast) {
+    if (toast._timer) clearTimeout(toast._timer);
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(1rem)';
+    toast.style.transition = 'opacity 150ms, transform 150ms';
+    setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 160);
+  }
+
+  window.Toast = {
+    success: function (msg) { _show('success', msg); },
+    error: function (msg) { _show('error', msg); },
+    info: function (msg) { _show('info', msg); },
+  };
+})();
+</script>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   Global form submit loading state + withLoading utility
+   ═══════════════════════════════════════════════════════════════════════════ #}
+<script>
+(function () {
+  var SPINNER = '<svg class="animate-spin w-4 h-4 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
+
+  // Auto-disable submit buttons on form POST
+  document.addEventListener('submit', function (e) {
+    var btn = e.target.querySelector('button[type="submit"]');
+    if (btn && !btn.disabled) {
+      btn.disabled = true;
+      btn.dataset.originalHtml = btn.innerHTML;
+      btn.innerHTML = SPINNER + ' <span>處理中...</span>';
+    }
+  });
+
+  // Utility for JS fetch operations
+  window.withLoading = function (btn, asyncFn) {
+    if (btn.disabled) return Promise.resolve();
+    btn.disabled = true;
+    var orig = btn.innerHTML;
+    btn.innerHTML = SPINNER + ' <span>處理中...</span>';
+    return asyncFn().catch(function (err) {
+      if (window.Toast) Toast.error(err.message || '操作失敗，請稍後再試');
+      throw err;
+    }).finally(function () {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    });
   };
 })();
 </script>

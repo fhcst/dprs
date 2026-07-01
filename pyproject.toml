@@ -1,9 +1,11 @@
 [project]
 name = "dprs"
-version = "0.3.0"
+version = "1.0.0"
 description = "Daily Practice Report System — 教學場域每日練習報告管理平台"
 readme = "README.md"
 license = { text = "ECL-2.0" }
+authors = [{ name = "CXPh03n1x" }]
+maintainers = [{ name = "CXPh03n1x" }]
 requires-python = ">=3.13"
 dependencies = [
     "beanie>=1.29.0",
@@ -13,8 +15,7 @@ dependencies = [
     "httpx>=0.28.1",
     "mongomock-motor>=0.0.35",
     "motor>=3.7.0",
-    "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=4.0.0,<5.0.0",
+    "argon2-cffi",
     "pyjwt>=2.11.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
@@ -22,7 +23,14 @@ dependencies = [
     "python-multipart>=0.0.20",
     "redis>=5.0.0",
     "fakeredis>=2.0.0",
+    "slowapi>=0.1.9",
+    "maturin>=1.5",
 ]
 
+# dsl-engine (Rust/PyO3) is NOT listed here — it requires Rust toolchain to build.
+# Install via: cd crates/dsl-engine && maturin develop --features python
+# In Docker: the Dockerfile multi-stage build handles it automatically.
+# The app runs without it; trigger-rule validation returns a clear error.
+
 [tool.uv.sources]
-fastapi-webpage = { git = "https://github.com/cxphoenix/fastapi-webpage.git" }
+fastapi-webpage = { git = "https://github.com/cxphoenix/fastapi-webpage.git", tag = "v0.3.1" }

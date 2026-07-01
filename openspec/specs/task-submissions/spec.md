@@ -114,7 +114,6 @@ Students SHALL be able to view their own past submissions including the review s
 
 ## Requirements
 
-
 <!-- @trace
 source: task-review-attendance-dashboard
 updated: 2026-03-22
@@ -158,6 +157,27 @@ Students SHALL be able to view their own past submissions including the review s
 
 - **WHEN** a submission in the history has `status: "rejected"`
 - **THEN** the page SHALL display the rejection reason and a link to `GET /pages/student/submissions/{submission_id}/rejection`
+
+---
+### Requirement: Teacher submission routes enforce class management
+
+Every teacher-facing route that returns a class's submission data — the JSON listing endpoint `GET /classes/{class_id}/submissions` and the SSR review page `GET /pages/teacher/class/{class_id}/submissions` — SHALL verify the caller manages the requested class via `can_manage_class()` before returning any data. Holding the `MANAGE_TASKS` permission flag SHALL NOT be sufficient; a teacher who does not manage the class SHALL receive HTTP 403 and no submission data.
+
+#### Scenario: Non-managing teacher lists submissions via the API
+
+- **WHEN** a teacher with `MANAGE_TASKS` requests `GET /classes/{class_id}/submissions` for a class they do not manage
+- **THEN** the system SHALL return HTTP 403 and SHALL NOT disclose any submission data
+
+#### Scenario: Non-managing teacher opens the review page
+
+- **WHEN** a teacher with `MANAGE_TASKS` requests `GET /pages/teacher/class/{class_id}/submissions` for a class they do not manage
+- **THEN** the system SHALL return HTTP 403 before rendering, and SHALL NOT disclose the roster or submissions
+
+#### Scenario: Managing teacher reads their own class
+
+- **WHEN** a teacher who manages the class requests either route
+- **THEN** the system SHALL return the class's submission data
+
 ## ADDED Requirements
 
 ### Requirement: Submission endpoint validates class membership
@@ -182,4 +202,34 @@ code:
   - src/tasks/submissions/router.py
 tests:
   - tests/test_security_audit.py
+-->
+
+### Requirement: Student submit page validates class membership before rendering
+
+The system SHALL verify that the current student is a member of the target class before rendering `GET /pages/student/classes/{class_id}/submit`. The page MUST NOT reveal the current day's template, rejected-submission state, or class-specific empty-state messages to users who are not members of that class.
+
+#### Scenario: Class member can open the submit page
+
+- **WHEN** an authenticated student who belongs to class C requests `GET /pages/student/classes/{class_id}/submit` for class C
+- **THEN** the system SHALL render the submit page normally using that class's current task state
+
+#### Scenario: Non-member is rejected before class task details are revealed
+
+- **WHEN** an authenticated user who is not a member of class C requests `GET /pages/student/classes/{class_id}/submit` for class C
+- **THEN** the system SHALL return HTTP 403
+- **AND** the response SHALL NOT reveal whether class C has a task template for today
+- **AND** the response SHALL NOT reveal rejected-submission state for that class
+
+#### Scenario: Member sees the empty state only for their own class
+
+- **WHEN** an authenticated student who belongs to class C requests `GET /pages/student/classes/{class_id}/submit` for class C and no template is assigned for today
+- **THEN** the system SHALL render the submit page with the "no task today" empty state
+
+<!-- @trace
+source: fix-submit-page-membership-check
+updated: 2026-04-04
+code:
+  - src/pages/router.py
+tests:
+  - tests/test_pages.py
 -->

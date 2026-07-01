@@ -86,3 +86,55 @@ async def test_redis_flag_missing_but_mongo_has_config(db, fake_redis):
     assert flag == b"true"
     assert state.system_config is not None
     assert state.system_config.site_name == "Recovered"
+
+
+# ── JWT startup check (R2) ───────────────────────────────────────────────────
+
+def test_check_secret_safety_raises_in_production_with_default_secret(monkeypatch):
+    """check_secret_safety() must raise RuntimeError in production if SESSION_SECRET is default."""
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "production")
+    monkeypatch.setenv("SESSION_SECRET", "dev-secret-change-in-production")
+    import importlib
+    import core.auth.jwt as jwt_mod
+    importlib.reload(jwt_mod)
+    with pytest.raises(RuntimeError, match="SESSION_SECRET"):
+        jwt_mod.check_secret_safety()
+
+
+def test_check_secret_safety_logs_warning_in_dev_with_default_secret(monkeypatch, caplog):
+    """check_secret_safety() must only warn (not raise) in non-production with default secret."""
+    import logging
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "development")
+    monkeypatch.setenv("SESSION_SECRET", "dev-secret-change-in-production")
+    import importlib
+    import core.auth.jwt as jwt_mod
+    importlib.reload(jwt_mod)
+    with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
+        jwt_mod.check_secret_safety()  # must NOT raise
+    assert any("SESSION_SECRET" in r.message for r in caplog.records)
+
+
+def test_check_secret_safety_passes_with_custom_secret(monkeypatch):
+    """check_secret_safety() must not raise or warn when SESSION_SECRET is set to a custom value."""
+    monkeypatch.setenv("FASTAPI_APP_ENVIRONMENT", "production")
+    monkeypatch.setenv("SESSION_SECRET", "a-very-long-custom-production-secret-that-is-safe")
+    import importlib
+    import core.auth.jwt as jwt_mod
+    importlib.reload(jwt_mod)
+    jwt_mod.check_secret_safety()  # must not raise
+
+
+# ── Rate limiting middleware (R4) ────────────────────────────────────────────
+
+def test_slowapi_limiter_importable():
+    """slowapi Limiter must be importable (dependency installed)."""
+    from slowapi import Limiter
+    assert Limiter is not None
+
+
+def test_slowapi_limiter_attached_to_app():
+    """app.state.limiter must be a SlowAPI Limiter instance."""
+    from slowapi import Limiter
+    import main as app_mod
+    assert hasattr(app_mod.app.state, "limiter")
+    assert isinstance(app_mod.app.state.limiter, Limiter)

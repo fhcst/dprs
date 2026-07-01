@@ -1,0 +1,36 @@
+# ==============================================================================
+# docker-compose.dev.yml — 本機 dev 直連用 compose overlay
+# ==============================================================================
+# 本檔為「本機開發直連」的 compose overlay。與 docker-compose.override.yml 不同，
+# 本檔「不會」被 compose 自動合併（只有同名的 docker-compose.override.yml 才會），
+# 因此正式機跑 `docker compose --profile tunnel up` 時完全不受本檔影響、
+# 保證不曝露任何 host port。
+#
+# 啟用方式（本機開發，需顯式 -f 疊加）：
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# 內容：
+#   1. 重新 publish 127.0.0.1:8000 → app:8000，讓本機可直接開 http://localhost:8000
+#   2. 掛載 ./src 進 container，搭配 dev 模式（fastapi dev）的 hot-reload
+#   3. 覆寫 FASTAPI_APP_ENVIRONMENT=dev——.env.example 預設為 prod（正式安全預設），
+#      本 overlay 在本機把它切回 dev，使 hot-reload 生效且不觸發 prod 的密鑰 guard
+#
+# 為何用顯式 `-f` 而非自動合併的 docker-compose.override.yml：
+#   compose 會「自動合併」同目錄的 docker-compose.override.yml，且與 profile 無關，
+#   會連 `docker compose --profile tunnel up` 一起合併、把 app 重新 publish 到
+#   127.0.0.1:8000，破壞 tunnel-only 對外保證。改用「不自動合併、需顯式 -f」的
+#   docker-compose.dev.yml，正式機完全不受影響，本機 dev 也只是多打一段 -f。
+# ==============================================================================
+
+services:
+  app:
+    # 僅綁 loopback，不對外曝露；本機 dev 直連用。
+    ports:
+      - "127.0.0.1:8000:8000"
+    # 掛載原始碼供 fastapi dev hot-reload；prod 走預建映像時不需要。
+    volumes:
+      - ./src:/app/src
+    # 本機 dev 切回 dev 模式：啟用 hot-reload 並略過 prod 的 SESSION_SECRET guard。
+    # .env.example 預設 FASTAPI_APP_ENVIRONMENT=prod，此處覆寫之。
+    environment:
+      - FASTAPI_APP_ENVIRONMENT=dev

@@ -46,12 +46,12 @@ tests:
 ---
 ### Requirement: Task assignment optionally syncs to Discord
 
-The system SHALL send a Discord embed message to the class Webhook URL when a teacher assigns a task and opts in to Discord sync.
+The system SHALL send a Discord embed message to the class Webhook URL when a teacher assigns a task and opts in to Discord sync. The embed content SHALL be rendered using the template resolution chain: task-level override > class default template > system default. The system SHALL perform variable interpolation on the resolved template before sending.
 
 #### Scenario: Message sent on opt-in assignment
 
 - **WHEN** a teacher assigns a task and the "同步到 Discord" option is checked and the class has a Webhook URL
-- **THEN** the system SHALL send a POST request to the Webhook URL with an embed containing task name, description, and date
+- **THEN** the system SHALL send a POST request to the Webhook URL with an embed whose title, description, and footer are resolved through the template fallback chain and variable interpolation
 
 #### Scenario: No message sent when opt-out
 
@@ -63,27 +63,37 @@ The system SHALL send a Discord embed message to the class Webhook URL when a te
 - **WHEN** a class has no Webhook URL configured and a teacher assigns a task with sync checked
 - **THEN** the system SHALL silently skip the Discord send
 
-<!-- @trace
-source: discord-integration
-updated: 2026-03-21
--->
+#### Scenario: Embed uses system defaults when no template is configured
+
+- **WHEN** a teacher assigns a task with Discord sync enabled, the class has no `discord_template` set, and no task-level overrides are provided
+- **THEN** the embed title SHALL be the task name, the embed description SHALL be the task description truncated to 200 characters, and the embed footer SHALL be the system site_name value
 
 
 <!-- @trace
-source: discord-integration
-updated: 2026-03-21
+source: dc-template-msg-editor
+updated: 2026-03-25
 code:
-  - src/integrations/discord/service.py
-  - src/tasks/templates/router.py
-  - src/core/classes/router.py
-  - src/templates/teacher/class_hub.html
-  - src/integrations/__init__.py
+  - src/core/system/models.py
   - src/templates/teacher/template_assign.html
+  - src/templates/teacher/class_hub.html
+  - src/core/classes/service.py
+  - src/integrations/discord/service.py
+  - uv.lock
   - src/core/classes/models.py
   - src/pages/router.py
-  - src/integrations/discord/__init__.py
+  - src/templates/teacher/class_members.html
+  - scripts/migrations/20260325_004_join_request_index.py
+  - src/core/system/router.py
+  - src/tasks/templates/router.py
+  - src/shared/page_context.py
+  - src/templates/admin/system_settings.html
+  - src/main.py
+  - src/templates/student/dashboard.html
+  - src/core/classes/router.py
 tests:
+  - tests/test_dc_template.py
   - tests/test_discord_integration.py
+  - tests/test_join_requests.py
 -->
 
 ---
@@ -117,6 +127,7 @@ code:
 tests:
   - tests/test_discord_integration.py
 -->
+
 ## ADDED Requirements
 
 ### Requirement: Discord webhook URL format validation

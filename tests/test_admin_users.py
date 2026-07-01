@@ -226,8 +226,8 @@ async def test_csv_import_creates_valid_users(db, app):
     from core.users.models import User
     _, token = await _make_user(int(SITE_ADMIN))
     csv_data = _make_csv(
-        ["alice", "pw1", "Alice", "STUDENT", "math;science"],
-        ["bob", "pw2", "Bob", "TEACHER", ""],
+        ["alice", "password1", "Alice", "STUDENT", "math;science"],
+        ["bob", "password2", "Bob", "TEACHER", ""],
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ac.cookies.set("access_token", token)
@@ -243,7 +243,7 @@ async def test_csv_import_skips_duplicate_username(db, app):
     """POST /admin/users/import must skip rows with existing usernames."""
     from core.auth.permissions import SITE_ADMIN
     _, token = await _make_user(int(SITE_ADMIN), username="admin")
-    csv_data = _make_csv(["admin", "pw", "Admin Again", "STUDENT", ""])
+    csv_data = _make_csv(["admin", "password123", "Admin Again", "STUDENT", ""])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ac.cookies.set("access_token", token)
         resp = await ac.post("/admin/users/import", files={"file": ("users.csv", csv_data, "text/csv")})
@@ -267,3 +267,187 @@ async def test_csv_import_skips_invalid_preset(db, app):
     assert data["success"] == 0
     assert len(data["failed"]) == 1
     assert "preset" in data["failed"][0]["reason"].lower()
+
+
+# ── Password strength enforcement (R10) ─────────────────────────────────────
+
+async def test_create_user_rejects_weak_password(db, app):
+    """POST /admin/users must reject passwords shorter than 8 characters."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.post("/admin/users", json={
+            "username": "newu", "password": "short", "display_name": "New User",
+        })
+    assert resp.status_code == 422
+
+
+async def test_update_user_rejects_weak_new_password(db, app):
+    """PUT /admin/users/{id} must reject new_password shorter than 8 characters."""
+    from core.auth.permissions import SITE_ADMIN
+    user, token = await _make_user(int(SITE_ADMIN))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.put(f"/admin/users/{user.id}", json={"new_password": "weak"})
+    assert resp.status_code == 422
+
+
+async def test_csv_import_marks_weak_password_row_as_failed(db, app):
+    """POST /admin/users/import must mark rows with weak passwords as failed."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN))
+    csv_data = _make_csv(["u1", "pw", "User One", "STUDENT", ""])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.post("/admin/users/import", files={"file": ("users.csv", csv_data, "text/csv")})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] == 0
+    assert len(data["failed"]) == 1
+    assert "密碼" in data["failed"][0]["reason"] or "password" in data["failed"][0]["reason"].lower()
+
+
+# ── Permission ceiling checks (CWE-269) ─────────────────────────────────────
+
+async def test_create_user_cannot_grant_higher_permissions(db, app):
+    """POST /admin/users must return 403 when caller tries to set permissions
+    higher than their own (e.g. USER_ADMIN granting WRITE_SYSTEM)."""
+    from core.auth.permissions import USER_ADMIN, WRITE_SYSTEM
+    _, token = await _make_user(int(USER_ADMIN), username="useradmin")
+    # Try to create a user with WRITE_SYSTEM which USER_ADMIN doesn't have
+    new_perms = int(USER_ADMIN | WRITE_SYSTEM)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.post("/admin/users", json={
+            "username": "newu",
+            "password": "password123",
+            "display_name": "New User",
+            "permissions": new_perms,
+        })
+    assert resp.status_code == 403
+
+
+async def test_create_user_can_grant_lower_or_equal_permissions(db, app):
+    """POST /admin/users must return 201 when caller grants permissions
+    that are a strict subset of their own (READ_USERS only for a USER_ADMIN caller)."""
+    from core.auth.permissions import USER_ADMIN, READ_USERS
+    _, token = await _make_user(int(USER_ADMIN), username="useradmin")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.post("/admin/users", json={
+            "username": "newstudent",
+            "password": "password123",
+            "display_name": "New Student",
+            "permissions": int(READ_USERS),
+        })
+    assert resp.status_code == 201
+
+
+async def test_update_user_cannot_grant_higher_permissions(db, app):
+    """PUT /admin/users/{id} must return 403 when caller tries to set permissions
+    higher than their own."""
+    from core.auth.permissions import USER_ADMIN, STUDENT, WRITE_SYSTEM
+    caller, token = await _make_user(int(USER_ADMIN), username="useradmin")
+    target, _ = await _make_user(int(STUDENT), username="target")
+    new_perms = int(USER_ADMIN | WRITE_SYSTEM)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.put(f"/admin/users/{target.id}", json={"permissions": new_perms})
+    assert resp.status_code == 403
+
+
+async def test_update_user_can_grant_lower_or_equal_permissions(db, app):
+    """PUT /admin/users/{id} must return 200 when caller grants permissions
+    that are a strict subset of their own."""
+    from core.auth.permissions import USER_ADMIN, READ_USERS
+    from core.auth.permissions import STUDENT
+    caller, token = await _make_user(int(USER_ADMIN), username="useradmin")
+    target, _ = await _make_user(int(STUDENT), username="target")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.put(f"/admin/users/{target.id}", json={"permissions": int(READ_USERS)})
+    assert resp.status_code == 200
+
+
+async def test_bulk_update_permissions_cannot_grant_higher(db, app):
+    """PATCH /admin/users/bulk must return 403 when caller tries to set permissions
+    higher than their own."""
+    from core.auth.permissions import USER_ADMIN, STUDENT, WRITE_SYSTEM
+    caller, token = await _make_user(int(USER_ADMIN), username="useradmin")
+    target, _ = await _make_user(int(STUDENT), username="target")
+    new_perms = int(USER_ADMIN | WRITE_SYSTEM)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.patch("/admin/users/bulk", json={
+            "ids": [str(target.id)],
+            "permissions": new_perms,
+        })
+    assert resp.status_code == 403
+
+
+async def test_bulk_update_permissions_can_grant_lower_or_equal(db, app):
+    """PATCH /admin/users/bulk must return 200 when caller grants permissions
+    that are a strict subset of their own."""
+    from core.auth.permissions import USER_ADMIN, READ_USERS
+    from core.auth.permissions import STUDENT
+    caller, token = await _make_user(int(USER_ADMIN), username="useradmin")
+    target, _ = await _make_user(int(STUDENT), username="target")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.patch("/admin/users/bulk", json={
+            "ids": [str(target.id)],
+            "permissions": int(READ_USERS),
+        })
+    assert resp.status_code == 200
+
+
+# ── File size limit (CWE-400) ────────────────────────────────────────────────
+
+async def test_csv_import_rejects_file_over_1mb(db, app):
+    """POST /admin/users/import must return 413 when the uploaded file exceeds 1 MB."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN))
+    # Generate a CSV payload that is just over 1 MB (1,048,576 bytes)
+    oversized_data = b"x" * (1_048_576 + 1)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.post(
+            "/admin/users/import",
+            files={"file": ("big.csv", oversized_data, "text/csv")},
+        )
+    assert resp.status_code == 413
+
+
+# ── GET /admin/users/check-username ────────────────────────────────────────
+
+async def test_check_username_available(db, app):
+    """GET /admin/users/check-username must return available=true for unused names."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get("/admin/users/check-username", params={"username": "nonexistent"})
+    assert resp.status_code == 200
+    assert resp.json()["available"] is True
+
+
+async def test_check_username_taken(db, app):
+    """GET /admin/users/check-username must return available=false for existing names."""
+    from core.auth.permissions import SITE_ADMIN
+    _, token = await _make_user(int(SITE_ADMIN), username="admin")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get("/admin/users/check-username", params={"username": "admin"})
+    assert resp.status_code == 200
+    assert resp.json()["available"] is False
+
+
+async def test_check_username_requires_manage_users(db, app):
+    """GET /admin/users/check-username must return 403 without MANAGE_USERS."""
+    from core.auth.permissions import STUDENT
+    _, token = await _make_user(int(STUDENT), username="student")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set("access_token", token)
+        resp = await ac.get("/admin/users/check-username", params={"username": "anyone"})
+    assert resp.status_code == 403

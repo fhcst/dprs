@@ -3,9 +3,22 @@ from gamification.points.models import PointTransaction
 
 
 async def get_balance(student_id: str) -> int:
-    """Compute balance by summing all transactions for the student."""
+    """Compute balance by summing all transactions for the student (all classes)."""
     transactions = await PointTransaction.find(
         PointTransaction.student_id == student_id
+    ).to_list()
+    return sum(t.amount for t in transactions)
+
+
+async def get_class_balance(student_id: str, class_id: str) -> int:
+    """Compute a student's point balance scoped to a single class.
+
+    Points are earned per class; class-facing surfaces (leaderboards, revoke
+    caps) must not draw on totals accumulated in other classes.
+    """
+    transactions = await PointTransaction.find(
+        PointTransaction.student_id == student_id,
+        PointTransaction.class_id == class_id,
     ).to_list()
     return sum(t.amount for t in transactions)
 
@@ -69,9 +82,9 @@ async def revoke_points(
 ) -> PointTransaction:
     """
     Deduct points from a student.
-    The deduction is capped at the student's current balance.
+    The deduction is capped at the student's current balance in this class.
     """
-    current_balance = await get_balance(student_id)
+    current_balance = await get_class_balance(student_id, class_id)
     capped_amount = min(amount, current_balance)
 
     tx = PointTransaction(

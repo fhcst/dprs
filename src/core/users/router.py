@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from core.auth.guards import require_permission
-from core.auth.password import hash_password
+from core.auth.password import hash_password, validate_password_strength
 from core.auth.permissions import (
     MANAGE_USERS,
     PERMISSION_SCHEMA,
@@ -85,6 +85,16 @@ def _user_admin_response(user: User) -> dict:
     return admin_view(user)
 
 
+@router.get("/users/check-username")
+async def check_username(
+    username: str,
+    _: User = Depends(require_permission(MANAGE_USERS)),
+):
+    """Check whether a username is already taken. Returns {available: bool}."""
+    existing = await User.find_one(User.username == username)
+    return {"available": existing is None}
+
+
 @router.get("/users")
 async def list_users(
     page: int = 1,
@@ -106,9 +116,18 @@ async def list_users(
 @router.post("/users", status_code=status.HTTP_201_CREATED)
 async def create_user(
     body: CreateUserRequest,
-    _: User = Depends(require_permission(MANAGE_USERS)),
+    current_user: User = Depends(require_permission(MANAGE_USERS)),
 ):
     """User admin creates a new user account."""
+    if body.permissions & ~current_user.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot grant permissions higher than your own",
+        )
+    try:
+        validate_password_strength(body.password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     existing = await User.find_one(User.username == body.username)
     if existing:
         raise HTTPException(
@@ -163,9 +182,14 @@ async def bulk_delete_users(
 @router.patch("/users/bulk")
 async def bulk_update_permissions(
     body: BulkPermissionsRequest,
-    _: User = Depends(require_permission(MANAGE_USERS)),
+    current_user: User = Depends(require_permission(MANAGE_USERS)),
 ):
     """Bulk update permissions for a list of users."""
+    if body.permissions & ~current_user.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot grant permissions higher than your own",
+        )
     updated = 0
     for uid in body.ids:
         user = await User.get(uid)
@@ -242,12 +266,17 @@ async def get_user(
 async def update_user(
     user_id: str,
     body: UpdateUserRequest,
-    _: User = Depends(require_permission(MANAGE_USERS)),
+    current_user: User = Depends(require_permission(MANAGE_USERS)),
 ):
     """Update a user's fields. identity_tags, name, email require MANAGE_USERS."""
     user = await User.get(user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if body.permissions is not None and (body.permissions & ~current_user.permissions):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot grant permissions higher than your own",
+        )
     if body.display_name is not None:
         user.display_name = body.display_name
     if body.name is not None:
@@ -261,6 +290,10 @@ async def update_user(
     if body.tags is not None:
         user.tags = body.tags
     if body.new_password is not None:
+        try:
+            validate_password_strength(body.new_password)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
         user.hashed_password = hash_password(body.new_password)
     if body.student_profile is not None:
         user.student_profile = StudentProfile(**body.student_profile.model_dump())
@@ -284,6 +317,9 @@ async def delete_user(
 
 # ── CSV import ───────────────────────────────────────────────────────────────
 
+_CSV_IMPORT_MAX_BYTES = 1_048_576  # 1 MB
+
+
 @router.post("/users/import")
 async def import_users_csv(
     file: UploadFile = File(...),
@@ -295,6 +331,11 @@ async def import_users_csv(
     identity_tag, preset, tags, class_name, seat_number
     """
     content = await file.read()
+    if len(content) > _CSV_IMPORT_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File too large. Maximum allowed size is 1 MB.",
+        )
     reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
 
     success = 0
@@ -318,6 +359,12 @@ async def import_users_csv(
 
         if identity_tag and identity_tag not in _IDENTITY_TAG_VALUES:
             failed.append({"row": row_num, "reason": f"Unknown identity tag: {identity_tag!r}"})
+            continue
+
+        try:
+            validate_password_strength(password)
+        except ValueError as e:
+            failed.append({"row": row_num, "reason": str(e)})
             continue
 
         existing = await User.find_one(User.username == username)

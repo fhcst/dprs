@@ -9,7 +9,7 @@ from core.auth.permissions import (
     WRITE_SYSTEM,
 )
 from core.classes.models import Class, ClassMembership
-from core.users.models import User
+from core.users.models import IdentityTag, User
 from pages.deps import get_page_user
 
 
@@ -40,6 +40,7 @@ async def build_page_context(current_user: User) -> dict:
         "can_manage_tasks": bool(current_user.permissions & MANAGE_TASKS),
         "can_manage_users": bool(current_user.permissions & MANAGE_USERS),
         "is_sys_admin": bool(current_user.permissions & WRITE_SYSTEM),
+        "is_student": IdentityTag.STUDENT in current_user.identity_tags,
         "classes": classes,
     }
 

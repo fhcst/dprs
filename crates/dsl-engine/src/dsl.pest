@@ -1,0 +1,50 @@
+// Achievement DSL Grammar
+// Expression language for trigger rules: S2 style (SQL WHERE-like)
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// Entry point
+program = { SOI ~ expression ~ EOI }
+
+// Expressions — lowest precedence first (OR < AND < NOT < comparison < atom)
+expression = { or_expr }
+
+or_expr  = { and_expr ~ (or_op ~ and_expr)* }
+and_expr = { not_expr ~ (and_op ~ not_expr)* }
+not_expr = { not_op ~ not_expr | comparison }
+
+or_op  = { ^"OR" }
+and_op = { ^"AND" }
+not_op = { ^"NOT" }
+
+// Comparison: value op value
+comparison = { value ~ (compare_op ~ value)? }
+
+compare_op = {
+    ">=" | "<=" | "!=" | "==" | ">" | "<"
+}
+
+// Values — atoms that can appear on either side of a comparison
+value = { func_call | literal | variable | "(" ~ expression ~ ")" }
+
+// Variables: simple identifiers or dot-notation (event.type)
+variable = @{ ident ~ ("." ~ ident)* }
+ident    = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Literals
+literal = { float_lit | int_lit | string_lit | bool_lit }
+
+int_lit    = @{ "-"? ~ ASCII_DIGIT+ }
+float_lit  = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+string_lit = @{ "\"" ~ string_inner ~ "\"" }
+string_inner = @{ (!("\"" | "\\") ~ ANY)* }
+bool_lit   = { ^"true" | ^"false" }
+
+// Function calls: name(arg1, arg2, ...)
+func_call = { func_name ~ "(" ~ func_args ~ ")" }
+func_name = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+func_args = { func_arg ~ ("," ~ func_arg)* }
+func_arg  = { time_window | variable | literal }
+
+// Time window tokens: last_7_days, last_30_days, etc.
+time_window = @{ "last_" ~ ASCII_DIGIT+ ~ "_days" }

@@ -5,7 +5,7 @@ from core.auth.deps import get_current_user
 from core.auth.permissions import MANAGE_ALL_CLASSES, MANAGE_OWN_CLASS as MANAGE_CLASS
 from core.classes.models import Class, ClassMembership
 from core.users.models import User
-from gamification.points.service import get_balance
+from gamification.points.service import get_class_balance
 from pages.deps import get_page_user
 from shared.page_context import build_page_context
 from shared.webpage import webpage
@@ -23,7 +23,7 @@ async def _build_class_leaderboard(class_id: str) -> list[dict]:
     entries = []
     for m in memberships:
         user = await User.get(m.user_id)
-        balance = await get_balance(m.user_id)
+        balance = await get_class_balance(m.user_id, class_id)
         entries.append({
             "student_id": m.user_id,
             "display_name": user.display_name if user else m.user_id,
@@ -103,12 +103,21 @@ async def leaderboard_page(
     if cls is None:
         raise HTTPException(status_code=404, detail="Class not found")
 
+    if not (user.permissions & MANAGE_ALL_CLASSES):
+        membership = await ClassMembership.find_one(
+            ClassMembership.class_id == class_id,
+            ClassMembership.user_id == str(user.id),
+        )
+        if membership is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this class")
+
     visible = bool(user.permissions & MANAGE_CLASS) or cls.leaderboard_enabled
     entries = await _build_class_leaderboard(class_id) if visible else []
 
     from gamification.badges.models import BadgeAward
+    from gamification.badges.service import active_awards_query
     for entry in entries:
-        count = await BadgeAward.find(BadgeAward.student_id == entry["student_id"]).count()
+        count = await active_awards_query(BadgeAward.student_id == entry["student_id"]).count()
         entry["badge_count"] = count
 
     page_ctx = await build_page_context(user)

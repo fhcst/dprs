@@ -22,6 +22,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 .pytest_cache/
+pytest-result.txt
 
 # --- Environments ---
 .env
@@ -115,6 +116,28 @@ build/
 *.pid.lock
 .spectra/
 openspec/.vector-search.db*
+
+# --- Rust build artifacts (keep pkg/ — pre-built WASM bundle for frontend) ---
+crates/*/target/
+
+# --- Tailwind Standalone CLI binary ---
+tools/tailwindcss
+
+# --- Tailwind CSS build output ---
+src/static/css/tailwind.css
+
+# --- MongoDB 備份產物（scripts/backup.sh / mongo-backup service 輸出）---
+backups/
+
+# --- 防呆：禁止提交會被「自動合併」的 docker-compose.override.yml ---
+# 本專案的本機 dev overlay 是「不自動合併、需顯式 -f」的 docker-compose.dev.yml（已進 repo）。
+# compose 會在每個無 -f 的 up 自動合併同名的 docker-compose.override.yml（與 profile 無關），
+# 連 `--profile tunnel up` 都會被它重新曝露 host port，故一律 gitignore 防止誤入 repo。
+docker-compose.override.yml
+
+# --- 安全稽核與分析產物（本機工具輸出，含漏洞細節/本機路徑，嚴禁提交）---
+.security-audit/
+.understand-anything/
 
 # --- AI Agent local settings ---
 .claude/settings.local.json

@@ -1,0 +1,63 @@
+name: Publish Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 同一個 tag ref 同時只跑一個 publish；單一觸發來源（push tag）即可，
+# 不掛 release: published 避免同版本 build/push 兩次。
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/fhcst/dprs
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag rules mirror scripts/docker-build.sh:
+      #   v1.2.3     -> :1 :1.2 :1.2.3 :latest
+      #   v0.3.1     -> :0.3 :0.3.1 :latest   (no bare major tag when major = 0)
+      #   v1.0.0-rc1 -> :1.0.0-rc1            (pre-release: no shorthand, no latest)
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          # latest=auto -> :latest only for non-prerelease semver tags.
+          # metadata-action also skips {{major}} / {{major}}.{{minor}} on pre-releases.
+          flavor: |
+            latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

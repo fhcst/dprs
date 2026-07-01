@@ -409,30 +409,118 @@ async def test_setup_valid_password_succeeds(wizard_app):
 
 # ─── 4.6 JWT secret warning ───────────────────────────────────────────────────
 
-def test_jwt_warns_if_default_secret(caplog):
-    """Using the default SESSION_SECRET logs a WARNING."""
+def test_jwt_warns_if_default_secret(caplog, monkeypatch):
+    """Non-production with the default SESSION_SECRET logs a WARNING (does not raise)."""
     import core.auth.jwt as jwt_module
-    original = jwt_module._SECRET
-    try:
-        jwt_module._SECRET = jwt_module._DEFAULT_SECRET
-        with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
-            jwt_module.check_secret_safety()
-        assert any(
-            "secret" in r.message.lower() or "default" in r.message.lower()
-            for r in caplog.records
+    from shared.environment import _DEFAULT_SECRET
+    monkeypatch.delenv("FASTAPI_APP_ENVIRONMENT", raising=False)
+    with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
+        jwt_module.check_secret_safety(secret=_DEFAULT_SECRET)
+    assert any(
+        "secret" in r.message.lower() or "default" in r.message.lower()
+        for r in caplog.records
+    )
+
+
+def test_jwt_no_warning_if_custom_secret(caplog, monkeypatch):
+    """A strong custom SESSION_SECRET does not log a WARNING."""
+    import secrets
+    import core.auth.jwt as jwt_module
+    monkeypatch.delenv("FASTAPI_APP_ENVIRONMENT", raising=False)
+    strong_secret = secrets.token_hex(32)  # 64 hex chars
+    with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
+        jwt_module.check_secret_safety(secret=strong_secret)
+    assert caplog.records == []
+
+
+# ─── 7.1 Dockerfile: FORWARDED_ALLOW_IPS must not be * ───────────────────────
+
+def test_dockerfile_forwarded_allow_ips_not_wildcard():
+    """Dockerfile must not set FORWARDED_ALLOW_IPS=* (CWE-16: IP spoofing via trusting all proxies)."""
+    import pathlib
+    dockerfile = pathlib.Path(__file__).parent.parent / "Dockerfile"
+    content = dockerfile.read_text()
+    assert "FORWARDED_ALLOW_IPS=*" not in content, (
+        "Dockerfile sets FORWARDED_ALLOW_IPS=* which trusts ALL proxies and enables "
+        "IP spoofing. Change to FORWARDED_ALLOW_IPS=\"\" so the default is no trusted proxies."
+    )
+
+
+# ─── 5.1 Docker-compose: MongoDB authentication ───────────────────────────────
+
+@pytest.fixture
+def compose():
+    import pathlib, yaml
+    path = pathlib.Path(__file__).parent.parent / "docker-compose.yml"
+    return yaml.safe_load(path.read_text())
+
+
+def test_mongo_service_has_root_username(compose):
+    """mongo service must configure MONGO_INITDB_ROOT_USERNAME."""
+    env = compose["services"]["mongo"]["environment"]
+    env_dict = {k: v for k, v in (e.split("=", 1) if "=" in e else (e, "") for e in env)} if isinstance(env, list) else env
+    assert any("MONGO_INITDB_ROOT_USERNAME" in str(k) for k in env_dict), (
+        "mongo service must set MONGO_INITDB_ROOT_USERNAME to enable authentication"
+    )
+
+
+def test_mongo_service_has_root_password(compose):
+    """mongo service must configure MONGO_INITDB_ROOT_PASSWORD."""
+    env = compose["services"]["mongo"]["environment"]
+    env_dict = {k: v for k, v in (e.split("=", 1) if "=" in e else (e, "") for e in env)} if isinstance(env, list) else env
+    assert any("MONGO_INITDB_ROOT_PASSWORD" in str(k) for k in env_dict), (
+        "mongo service must set MONGO_INITDB_ROOT_PASSWORD to enable authentication"
+    )
+
+
+def test_app_mongo_url_includes_credentials(compose):
+    """app service MONGO_URL must reference credential env vars."""
+    env = compose["services"]["app"]["environment"]
+    env_list = env if isinstance(env, list) else [f"{k}={v}" for k, v in env.items()]
+    mongo_url_entries = [e for e in env_list if "MONGO_URL" in str(e)]
+    assert mongo_url_entries, "app service must define MONGO_URL"
+    mongo_url = str(mongo_url_entries[0])
+    # Must not be a bare mongodb:// without credentials
+    assert "@" in mongo_url or "MONGO_ROOT" in mongo_url or "MONGO_USERNAME" in mongo_url, (
+        "MONGO_URL must include authentication credentials"
+    )
+
+
+# ─── 5.2 Docker-compose: Redis auth + port binding + mongo-express ────────────
+
+def test_mongo_port_bound_to_localhost(compose):
+    """MongoDB port must be bound to 127.0.0.1, not exposed publicly."""
+    ports = compose["services"]["mongo"].get("ports", [])
+    for p in ports:
+        assert "127.0.0.1" in str(p), (
+            f"MongoDB port '{p}' must be bound to 127.0.0.1, not exposed to all interfaces"
         )
-    finally:
-        jwt_module._SECRET = original
 
 
-def test_jwt_no_warning_if_custom_secret(caplog):
-    """Custom SESSION_SECRET does not log a WARNING."""
-    import core.auth.jwt as jwt_module
-    original = jwt_module._SECRET
-    try:
-        jwt_module._SECRET = "very-secure-custom-secret-xyz"
-        with caplog.at_level(logging.WARNING, logger="core.auth.jwt"):
-            jwt_module.check_secret_safety()
-        assert caplog.records == []
-    finally:
-        jwt_module._SECRET = original
+def test_redis_port_bound_to_localhost(compose):
+    """Redis port must be bound to 127.0.0.1, not exposed publicly."""
+    ports = compose["services"]["redis"].get("ports", [])
+    for p in ports:
+        assert "127.0.0.1" in str(p), (
+            f"Redis port '{p}' must be bound to 127.0.0.1, not exposed to all interfaces"
+        )
+
+
+def test_redis_service_has_requirepass(compose):
+    """Redis service must be started with --requirepass."""
+    redis_svc = compose["services"]["redis"]
+    command = str(redis_svc.get("command", ""))
+    assert "requirepass" in command, (
+        "Redis service must use --requirepass to require authentication"
+    )
+
+
+def test_mongo_express_is_behind_profile_or_absent(compose):
+    """mongo-express must be disabled by default (profiles) or removed entirely."""
+    if "mongo-express" not in compose["services"]:
+        return  # Removed — pass
+    profiles = compose["services"]["mongo-express"].get("profiles", [])
+    assert profiles, (
+        "mongo-express must use Docker Compose profiles (e.g. profiles: [debug]) "
+        "to prevent it from starting automatically in production"
+    )

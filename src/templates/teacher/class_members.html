@@ -29,37 +29,61 @@
   </div>
 </div>
 
+{# ── Pending Review Section ──────────────────────────────────────────────── #}
+<div id="pending-review" class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden mb-6">
+  <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
+    <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">待審核申請</h2>
+    <span id="pending-count" class="hidden text-xs bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 px-2 py-0.5 rounded-full font-medium"></span>
+  </div>
+  <div id="pending-list" class="divide-y divide-gray-100 dark:divide-gray-800">
+    <p class="px-5 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">載入中…</p>
+  </div>
+</div>
+
 {# Two-column layout: Batch Invite + Current Members #}
 <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
 <div class="lg:col-span-2">
-{# Batch Invite Section #}
+{# Batch Invite Section — Enumerate First #}
 <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
   <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-4">批次邀請學生</h2>
 
-  {# Search bar #}
-  <div class="flex gap-2 mb-4">
-    <select id="search-type"
-            class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shrink-0">
-      <option value="name">姓名</option>
-      <option value="class_name">班級</option>
-    </select>
-    <input type="text" id="search-input" placeholder="輸入關鍵字搜尋..."
-           oninput="debounceSearch()"
-           class="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+  {# Top bar: grouping switch + search filter #}
+  <div class="flex flex-wrap items-center gap-4 mb-4">
+    <div class="flex items-center gap-3 shrink-0">
+      <span class="text-xs font-medium text-gray-500 dark:text-gray-400">分組：</span>
+      <label class="inline-flex items-center gap-1.5 cursor-pointer">
+        <input type="radio" name="group-mode" value="class" checked
+               class="w-3.5 h-3.5 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+        <span class="text-sm text-gray-700 dark:text-gray-300">按班級</span>
+      </label>
+      <label class="inline-flex items-center gap-1.5 cursor-pointer">
+        <input type="radio" name="group-mode" value="tag"
+               class="w-3.5 h-3.5 text-brand-600 border-gray-300 dark:border-gray-600 focus:ring-brand-500">
+        <span class="text-sm text-gray-700 dark:text-gray-300">按標籤</span>
+      </label>
+    </div>
+    <input type="text" id="filter-input" placeholder="搜尋過濾（姓名、班級、座號、標籤）..."
+           class="flex-1 min-w-[180px] px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
   </div>
 
-  {# Search results #}
-  <div id="search-results" class="mb-4 min-h-[60px]">
-    <p class="text-sm text-gray-400 dark:text-gray-500 text-center py-4">輸入關鍵字以搜尋學生</p>
+  {# Loading indicator #}
+  <div id="loading-indicator" class="text-sm text-gray-400 dark:text-gray-500 text-center py-3">
+    <span id="loading-text">載入中…</span>
   </div>
 
-  {# Select all + confirm #}
+  {# Groups container #}
+  <div id="groups-container" class="space-y-1 mb-4 max-h-[480px] overflow-y-auto"></div>
+
+  {# Bottom bar: selected count + select all + invite button #}
   <div class="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
-    <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-600 dark:text-gray-400">
-      <input type="checkbox" id="select-all-students" onchange="toggleSelectAllStudents(this)"
-             class="rounded border-gray-300 dark:border-gray-600 text-brand-600">
-      全選
-    </label>
+    <div class="flex items-center gap-3">
+      <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-600 dark:text-gray-400">
+        <input type="checkbox" id="select-all-global"
+               class="rounded border-gray-300 dark:border-gray-600 text-brand-600">
+        全選
+      </label>
+      <span id="selected-count" class="text-xs text-brand-600 dark:text-brand-400 font-medium"></span>
+    </div>
     <button onclick="confirmInvite()"
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors duration-150 cursor-pointer">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -125,55 +149,306 @@
 {% block scripts %}
 <script>
 const CLASS_ID = '{{ class_id }}';
-let _searchTimer = null;
 
-function debounceSearch() {
-  clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(doSearch, 300);
+/* ── State ────────────────────────────────────────────────────── */
+let allStudents = [];
+let loadedTotal = 0;
+let fullyLoaded = false;
+let loadingPromise = null;
+const selected = new Set();
+const PAGE_SIZE = 100;
+
+/* ── Lazy Loading ─────────────────────────────────────────────── */
+async function loadAllStudents() {
+  if (loadingPromise) return loadingPromise;
+  loadingPromise = _doLoad();
+  return loadingPromise;
 }
 
-async function doSearch() {
-  const q = document.getElementById('search-input').value.trim();
-  const type = document.getElementById('search-type').value;
-  if (!q) {
-    document.getElementById('search-results').innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 text-center py-4">輸入關鍵字以搜尋學生</p>';
-    return;
+async function _doLoad() {
+  const indicator = document.getElementById('loading-indicator');
+  const loadingText = document.getElementById('loading-text');
+  indicator.classList.remove('hidden');
+  let offset = allStudents.length;
+
+  while (true) {
+    const resp = await fetch(`/classes/${CLASS_ID}/invite/students?offset=${offset}&limit=${PAGE_SIZE}`);
+    if (!resp.ok) break;
+    const data = await resp.json();
+    loadedTotal = data.total;
+    allStudents.push(...data.students);
+    offset += data.students.length;
+    loadingText.textContent = `載入中 ${allStudents.length}/${loadedTotal}`;
+    renderGroups();
+    if (offset >= data.total || data.students.length === 0) break;
   }
-  const resp = await fetch(`/classes/${CLASS_ID}/invite/search?q=${encodeURIComponent(q)}&type=${type}`);
-  if (!resp.ok) { return; }
-  const results = await resp.json();
-  renderResults(results);
+
+  fullyLoaded = true;
+  indicator.classList.add('hidden');
+  renderGroups();
 }
 
-function renderResults(results) {
-  const container = document.getElementById('search-results');
-  if (results.length === 0) {
-    container.innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 text-center py-4">找不到符合條件的學生</p>';
-    return;
+/* ── Grouping: by class ───────────────────────────────────────── */
+function groupByClass(students) {
+  const grades = {};
+  for (const s of students) {
+    const cn = s.class_name || '';
+    const grade = cn ? cn.charAt(0) : '';
+    const gradeKey = grade || '未分類';
+    const classKey = cn || '未分類';
+    if (!grades[gradeKey]) grades[gradeKey] = {};
+    if (!grades[gradeKey][classKey]) grades[gradeKey][classKey] = [];
+    grades[gradeKey][classKey].push(s);
   }
-  container.innerHTML = results.map(r => `
-    <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
-      <input type="checkbox" class="student-checkbox rounded border-gray-300 dark:border-gray-600 text-brand-600"
-             value="${r.user_id}">
-      <div class="flex-1 min-w-0">
-        <span class="text-sm font-medium text-gray-900 dark:text-gray-100">${escHtml(r.name || r.display_name)}</span>
-        <span class="text-xs text-gray-400 ml-2">${escHtml(r.display_name)}</span>
-        ${r.class_name ? `<span class="text-xs text-gray-500 ml-2">${escHtml(r.class_name)} ${r.seat_number ? '第' + r.seat_number + '號' : ''}</span>` : ''}
+  // Sort within each class by seat_number
+  for (const g of Object.values(grades)) {
+    for (const cls of Object.keys(g)) {
+      g[cls].sort((a, b) => a.seat_number - b.seat_number);
+    }
+  }
+  return grades;
+}
+
+function renderClassGroups(students) {
+  const grades = groupByClass(students);
+  const container = document.getElementById('groups-container');
+  const sortedGrades = Object.keys(grades).sort((a, b) => {
+    if (a === '未分類') return 1;
+    if (b === '未分類') return -1;
+    return a.localeCompare(b);
+  });
+
+  let html = '';
+  for (const grade of sortedGrades) {
+    const classes = grades[grade];
+    const sortedClasses = Object.keys(classes).sort((a, b) => {
+      if (a === '未分類') return 1;
+      if (b === '未分類') return -1;
+      return a.localeCompare(b);
+    });
+    const gradeLabel = grade === '未分類' ? '未分類' : `${grade}年級`;
+    const gradeCount = sortedClasses.reduce((sum, c) => sum + classes[c].length, 0);
+
+    html += `<details open class="group-grade">
+      <summary class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 cursor-pointer select-none">
+        <svg class="w-4 h-4 text-gray-400 transition-transform details-arrow" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">${escHtml(gradeLabel)}</span>
+        <span class="text-xs text-gray-400">(${gradeCount}人)</span>
+      </summary>
+      <div class="pl-3 mt-1 space-y-1">`;
+
+    for (const cls of sortedClasses) {
+      const items = classes[cls];
+      html += renderGroup(cls === '未分類' ? '未分類' : cls, items, `class-${grade}-${cls}`);
+    }
+    html += '</div></details>';
+  }
+
+  container.innerHTML = html || '<p class="text-sm text-gray-400 text-center py-4">沒有可邀請的學生</p>';
+  syncAllCheckboxStates();
+}
+
+/* ── Grouping: by tag ─────────────────────────────────────────── */
+function groupByTag(students) {
+  const tags = {};
+  for (const s of students) {
+    if (!s.tags || s.tags.length === 0) {
+      if (!tags['無標籤']) tags['無標籤'] = [];
+      tags['無標籤'].push(s);
+    } else {
+      for (const t of s.tags) {
+        if (!tags[t]) tags[t] = [];
+        tags[t].push(s);
+      }
+    }
+  }
+  for (const t of Object.keys(tags)) {
+    tags[t].sort((a, b) => {
+      const cmp = (a.class_name || '').localeCompare(b.class_name || '');
+      return cmp !== 0 ? cmp : a.seat_number - b.seat_number;
+    });
+  }
+  return tags;
+}
+
+function renderTagGroups(students) {
+  const tags = groupByTag(students);
+  const container = document.getElementById('groups-container');
+  const sortedTags = Object.keys(tags).sort((a, b) => {
+    if (a === '無標籤') return 1;
+    if (b === '無標籤') return -1;
+    return a.localeCompare(b);
+  });
+
+  let html = '';
+  for (const tag of sortedTags) {
+    html += renderGroup(tag, tags[tag], `tag-${tag}`);
+  }
+  container.innerHTML = html || '<p class="text-sm text-gray-400 text-center py-4">沒有可邀請的學生</p>';
+  syncAllCheckboxStates();
+}
+
+/* ── Shared group renderer ────────────────────────────────────── */
+function renderGroup(label, items, groupId) {
+  const visibleItems = items.filter(s => !s._hidden);
+  if (visibleItems.length === 0) return '';
+
+  let html = `<details open class="group-detail" data-group-id="${escAttr(groupId)}">
+    <summary class="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer select-none">
+      <div class="flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-gray-400 transition-transform details-arrow" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escHtml(label)}</span>
+        <span class="text-xs text-gray-400">(${visibleItems.length}人)</span>
       </div>
-    </label>
-  `).join('');
+      <label class="flex items-center gap-1.5 cursor-pointer" onclick="event.stopPropagation()">
+        <input type="checkbox" class="group-select-all rounded border-gray-300 dark:border-gray-600 text-brand-600"
+               data-group-id="${escAttr(groupId)}" onchange="toggleGroupSelect(this)">
+        <span class="text-xs text-gray-500 dark:text-gray-400">全選</span>
+      </label>
+    </summary>
+    <div class="pl-6 space-y-0.5 mt-1">`;
+
+  for (const s of visibleItems) {
+    const isChecked = selected.has(s.user_id) ? 'checked' : '';
+    const seatLabel = s.seat_number ? `${s.seat_number}號` : '';
+    const tagsLabel = s.tags && s.tags.length ? s.tags.map(t => `<span class="inline-block px-1.5 py-0 rounded text-xs bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400">${escHtml(t)}</span>`).join(' ') : '';
+
+    html += `<label class="flex items-center gap-3 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer student-row" data-uid="${escAttr(s.user_id)}">
+      <input type="checkbox" class="student-checkbox rounded border-gray-300 dark:border-gray-600 text-brand-600"
+             value="${escAttr(s.user_id)}" ${isChecked} onchange="onStudentToggle(this)">
+      <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+        <span class="text-sm font-medium text-gray-900 dark:text-gray-100">${escHtml(s.name || s.display_name)}</span>
+        ${seatLabel ? `<span class="text-xs text-gray-400">${seatLabel}</span>` : ''}
+        ${s.class_name ? `<span class="text-xs text-gray-500">${escHtml(s.class_name)}</span>` : ''}
+        ${tagsLabel ? `<span class="flex gap-1">${tagsLabel}</span>` : ''}
+      </div>
+    </label>`;
+  }
+
+  html += '</div></details>';
+  return html;
 }
 
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+/* ── Render dispatcher ────────────────────────────────────────── */
+function renderGroups() {
+  const mode = document.querySelector('input[name="group-mode"]:checked').value;
+  const q = document.getElementById('filter-input').value.trim().toLowerCase();
+
+  // Apply filter
+  for (const s of allStudents) {
+    if (!q) { s._hidden = false; continue; }
+    const haystack = [s.name, s.display_name, s.class_name, String(s.seat_number), ...(s.tags || [])].join(' ').toLowerCase();
+    s._hidden = !haystack.includes(q);
+  }
+
+  const visible = allStudents.filter(s => !s._hidden);
+
+  if (mode === 'class') {
+    renderClassGroups(visible);
+  } else {
+    renderTagGroups(visible);
+  }
+  updateSelectedCount();
 }
 
-function toggleSelectAllStudents(cb) {
-  document.querySelectorAll('.student-checkbox').forEach(box => { box.checked = cb.checked; });
+/* ── Selection management ─────────────────────────────────────── */
+function onStudentToggle(cb) {
+  if (cb.checked) {
+    selected.add(cb.value);
+  } else {
+    selected.delete(cb.value);
+  }
+  // Sync same student across tag groups
+  document.querySelectorAll(`.student-checkbox[value="${cb.value}"]`).forEach(other => {
+    other.checked = cb.checked;
+  });
+  updateGroupSelectAll();
+  updateSelectedCount();
 }
 
+function toggleGroupSelect(cb) {
+  const groupId = cb.dataset.groupId;
+  const detail = cb.closest('.group-detail') || cb.closest('.group-grade');
+  const boxes = detail.querySelectorAll('.student-checkbox');
+  boxes.forEach(box => {
+    if (box.closest('.student-row').style.display !== 'none') {
+      box.checked = cb.checked;
+      if (cb.checked) selected.add(box.value); else selected.delete(box.value);
+    }
+  });
+  // Sync across groups (for tag mode duplicates)
+  for (const uid of selected) {
+    document.querySelectorAll(`.student-checkbox[value="${uid}"]`).forEach(other => { other.checked = true; });
+  }
+  document.querySelectorAll('.student-checkbox').forEach(box => {
+    if (!selected.has(box.value)) box.checked = false;
+  });
+  updateGroupSelectAll();
+  updateSelectedCount();
+}
+
+function updateGroupSelectAll() {
+  document.querySelectorAll('.group-select-all').forEach(cb => {
+    const detail = cb.closest('.group-detail') || cb.closest('.group-grade');
+    const boxes = Array.from(detail.querySelectorAll('.student-checkbox'));
+    if (boxes.length === 0) { cb.checked = false; cb.indeterminate = false; return; }
+    const checked = boxes.filter(b => b.checked).length;
+    cb.checked = checked === boxes.length;
+    cb.indeterminate = checked > 0 && checked < boxes.length;
+  });
+}
+
+function syncAllCheckboxStates() {
+  document.querySelectorAll('.student-checkbox').forEach(cb => {
+    cb.checked = selected.has(cb.value);
+  });
+  updateGroupSelectAll();
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const el = document.getElementById('selected-count');
+  el.textContent = selected.size > 0 ? `已選取 ${selected.size} 人` : '';
+
+  const globalCb = document.getElementById('select-all-global');
+  const allBoxes = Array.from(document.querySelectorAll('.student-checkbox'));
+  const visibleBoxes = allBoxes.filter(b => b.closest('.student-row') && !b.closest('.student-row').classList.contains('hidden'));
+  if (visibleBoxes.length === 0) { globalCb.checked = false; globalCb.indeterminate = false; return; }
+  const checked = visibleBoxes.filter(b => b.checked).length;
+  globalCb.checked = checked === visibleBoxes.length;
+  globalCb.indeterminate = checked > 0 && checked < visibleBoxes.length;
+}
+
+/* ── Global select all ────────────────────────────────────────── */
+document.getElementById('select-all-global').addEventListener('change', function () {
+  document.querySelectorAll('.student-checkbox').forEach(cb => {
+    cb.checked = this.checked;
+    if (this.checked) selected.add(cb.value); else selected.delete(cb.value);
+  });
+  updateGroupSelectAll();
+  updateSelectedCount();
+});
+
+/* ── Group mode switch ────────────────────────────────────────── */
+document.querySelectorAll('input[name="group-mode"]').forEach(r => {
+  r.addEventListener('change', () => renderGroups());
+});
+
+/* ── Search filter ────────────────────────────────────────────── */
+let _filterTimer = null;
+document.getElementById('filter-input').addEventListener('input', function () {
+  clearTimeout(_filterTimer);
+  _filterTimer = setTimeout(async () => {
+    if (!fullyLoaded && this.value.trim()) {
+      await loadAllStudents();
+    }
+    renderGroups();
+  }, 200);
+});
+
+/* ── Invite action ────────────────────────────────────────────── */
 async function confirmInvite() {
-  const ids = Array.from(document.querySelectorAll('.student-checkbox:checked')).map(cb => cb.value);
+  const ids = Array.from(selected);
   if (ids.length === 0) { showToast('請先選取要邀請的學生', false); return; }
   const resp = await fetch(`/classes/${CLASS_ID}/invite/batch`, {
     method: 'POST',
@@ -183,8 +458,6 @@ async function confirmInvite() {
   if (resp.ok) {
     const data = await resp.json();
     showToast(`已加入 ${data.added} 位學生`, true);
-    document.getElementById('search-input').value = '';
-    document.getElementById('search-results').innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 text-center py-4">輸入關鍵字以搜尋學生</p>';
     setTimeout(() => location.reload(), 1200);
   } else {
     showToast('加入失敗，請稍後再試', false);
@@ -198,6 +471,77 @@ function showToast(msg, success) {
   el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
+
+function escAttr(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Pending join requests ──────────────────────────────────── */
+async function loadPendingRequests() {
+  const container = document.getElementById('pending-list');
+  const countBadge = document.getElementById('pending-count');
+  try {
+    const resp = await fetch(`/classes/${CLASS_ID}/join-requests`);
+    if (!resp.ok) { container.innerHTML = '<p class="px-5 py-6 text-sm text-red-400 text-center">載入失敗</p>'; return; }
+    const requests = await resp.json();
+    if (requests.length === 0) {
+      container.innerHTML = '<p class="px-5 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">目前沒有待審核的加入申請</p>';
+      countBadge.classList.add('hidden');
+      return;
+    }
+    countBadge.textContent = requests.length;
+    countBadge.classList.remove('hidden');
+    container.innerHTML = requests.map(r => `
+      <div class="flex items-center justify-between px-5 py-3" id="jr-${r.id}">
+        <div class="flex-1 min-w-0">
+          <span class="text-sm font-medium text-gray-900 dark:text-gray-100">${escHtml(r.student_name)}</span>
+          ${r.student_real_name ? `<span class="text-xs text-gray-500 ml-2">(${escHtml(r.student_real_name)})</span>` : ''}
+          <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            申請時間：${new Date(r.requested_at).toLocaleString('zh-TW')} · 邀請碼：<code class="text-xs">${escHtml(r.invite_code_used)}</code>
+          </div>
+        </div>
+        <div class="flex gap-2 shrink-0 ml-4">
+          <button onclick="reviewRequest('${r.id}', 'approve')"
+                  class="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors cursor-pointer">核准</button>
+          <button onclick="reviewRequest('${r.id}', 'reject')"
+                  class="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors cursor-pointer">拒絕</button>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    container.innerHTML = '<p class="px-5 py-6 text-sm text-red-400 text-center">載入失敗</p>';
+  }
+}
+
+async function reviewRequest(requestId, action) {
+  const actionLabel = action === 'approve' ? '核准' : '拒絕';
+  Modal.confirm(`確定要${actionLabel}此申請嗎？`, async function () {
+    const resp = await fetch(`/classes/${CLASS_ID}/join-requests/${requestId}/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if (resp.ok) {
+      const row = document.getElementById(`jr-${requestId}`);
+      if (row) row.remove();
+      if (action === 'approve') {
+        setTimeout(() => location.reload(), 800);
+      } else {
+        loadPendingRequests();
+      }
+    } else {
+      Modal.alert(`${actionLabel}失敗，請稍後再試`);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadPendingRequests();
+  loadAllStudents();
+});
 
 async function removeMember(userId, displayName) {
   Modal.confirm(`確定要移除「${displayName}」嗎？`, async function () {

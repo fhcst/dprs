@@ -80,6 +80,36 @@ async def test_local_auth_provider_rejects_unknown_user(db):
         await provider.authenticate({"username": "nobody", "password": "x"})
 
 
+# --- LocalAuthProvider timing side-channel (CWE-208) ---
+
+def test_local_provider_has_dummy_hash_constant():
+    """DUMMY_HASH must exist as a module-level Argon2id hash (not empty/placeholder)."""
+    import core.auth.local_provider as lp
+    assert hasattr(lp, "DUMMY_HASH"), "local_provider must expose a DUMMY_HASH constant"
+    dummy_hash = lp.DUMMY_HASH
+    assert isinstance(dummy_hash, str), "DUMMY_HASH must be a string"
+    assert len(dummy_hash) > 20, "DUMMY_HASH must be a real Argon2id hash, not empty"
+    assert dummy_hash.startswith("$argon2id$"), "DUMMY_HASH must be a valid Argon2id hash (starts with $argon2id$)"
+
+
+async def test_local_provider_unknown_user_exercises_dummy_hash(db):
+    """Authenticating an unknown username must invoke verify_password (via DUMMY_HASH),
+    not short-circuit — confirmed by patching verify_password and checking it is called."""
+    from unittest.mock import patch, MagicMock
+    from core.auth.local_provider import LocalAuthProvider
+
+    mock_verify = MagicMock(return_value=False)
+    with patch("core.auth.local_provider.verify_password", mock_verify):
+        provider = LocalAuthProvider()
+        with pytest.raises(ValueError):
+            await provider.authenticate({"username": "ghost_user_does_not_exist", "password": "x"})
+
+    assert mock_verify.called, (
+        "verify_password must be called even when the user does not exist "
+        "(dummy bcrypt call to prevent timing side-channel)"
+    )
+
+
 # --- JWT token ---
 
 def test_create_token_contains_claims():
@@ -108,6 +138,12 @@ def test_tampered_token_raises():
 
 
 # --- Password hashing ---
+
+def test_password_hash_uses_argon2id_format():
+    from core.auth.password import hash_password
+    h = hash_password("mypassword")
+    assert h.startswith("$argon2id$"), f"Expected Argon2id hash, got: {h[:20]}"
+
 
 def test_password_hashing_is_not_plaintext():
     from core.auth.password import hash_password
@@ -167,3 +203,27 @@ async def test_require_permission_rejects_user_without_flag(db):
     with pytest.raises(HTTPException) as exc_info:
         await dep(current_user=student)
     assert exc_info.value.status_code == 403
+
+
+# --- Password strength validation ---
+
+def test_validate_password_strength_rejects_short_password():
+    from core.auth.password import validate_password_strength
+    with pytest.raises(ValueError, match="8"):
+        validate_password_strength("short")
+
+
+def test_validate_password_strength_rejects_empty():
+    from core.auth.password import validate_password_strength
+    with pytest.raises(ValueError):
+        validate_password_strength("")
+
+
+def test_validate_password_strength_accepts_exactly_8_chars():
+    from core.auth.password import validate_password_strength
+    validate_password_strength("exactly8")  # must not raise
+
+
+def test_validate_password_strength_accepts_long_password():
+    from core.auth.password import validate_password_strength
+    validate_password_strength("this_is_a_very_long_password_123")  # must not raise
